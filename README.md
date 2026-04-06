@@ -61,22 +61,7 @@ RouteVulScan 是一个基于 Burp Suite Montoya API 开发的被动式路径漏�
 - JDK 17
 - Maven 3.9+
 
-## 目录结构
-
-```text
-RouteVulScan-main/
-├── pom.xml
-├── README.md
-├── Config_yaml.yaml
-├── img/
-└── src/
-    └── main/
-        └── java/
-```
-
 ## 构建方式
-
-如果你的本机通过 `jenv` 管理 Java，推荐显式指定 JDK 17：
 
 ```bash
 mvn clean package
@@ -136,11 +121,6 @@ Extender -> Extensions -> Add
 {{response.head.server}}
 {{response.status}}
 ```
-
-
-## License
-
-本仓库已补充来源与授权说明，详见 [LICENSE](./LICENSE)。
 
 ## 致谢
 
