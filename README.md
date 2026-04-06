@@ -140,7 +140,7 @@ Extender -> Extensions -> Add
 
 ## License
 
-本仓库已补充来源与授权说明，详见 [LICENSE](/Users/administrator/Downloads/temp_project/codex_tamper/RouteVulScan-main/LICENSE)。
+本仓库已补充来源与授权说明，详见 [LICENSE](./LICENSE)。
 
 ## 致谢
 
