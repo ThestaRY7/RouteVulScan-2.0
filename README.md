@@ -125,3 +125,5 @@ Extender -> Extensions -> Add
 ## 致谢
 
 - 原作者：F6JO
+
+[![Stargazers over time](https://starchart.cc/ThestaRY7/RouteVulScan-2.0.svg?variant=adaptive)](https://starchart.cc/ThestaRY7/RouteVulScan-2.0)
