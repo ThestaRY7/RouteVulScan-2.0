@@ -1,3 +1,5 @@
+README Version: [English](README_EN.md)
+
 # RouteVulScan
 
 RouteVulScan 是一个基于 Burp Suite Montoya API 开发的被动式路径漏洞探测插件。
