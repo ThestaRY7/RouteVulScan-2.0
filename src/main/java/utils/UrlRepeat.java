@@ -12,6 +12,10 @@ public class UrlRepeat {
         return this.MethodAndUrlMap;
     }
 
+    public void clear() {
+        getRequestMethodAndUrlMap().clear();
+    }
+
     public void addMethodAndUrl(String Method, String url) {
         if (Method == null || Method.length() <= 0)
             throw new IllegalArgumentException("Request method cannot be empty");
@@ -54,4 +58,3 @@ public class UrlRepeat {
         return parameter.substring(0, parameter.length() - 1);
     }
 }
-

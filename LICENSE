@@ -1,0 +1,33 @@
+RouteVulScan Derivative Work Notice
+Copyright (c) original authors and contributors.
+
+This repository is a modified derivative of the original RouteVulScan project:
+https://github.com/F6JO/RouteVulScan
+
+Important notice:
+
+1. As of 2026-04-06, the upstream GitHub repository page for `F6JO/RouteVulScan`
+   did not present an explicit open-source license file in the repository root,
+   and no GitHub-detected SPDX license label was visible on the repository page.
+
+2. Because the upstream project does not clearly publish a permissive or copyleft
+   license in the repository, this repository does NOT assert or grant any broader
+   copyright license over upstream code than what is already permitted by applicable
+   law or by permission from the original authors.
+
+3. All rights in the original upstream code remain with the original authors and
+   contributors of the upstream project.
+
+4. Modifications made in this repository are provided for research, learning,
+   interoperability, maintenance, and security testing discussion. If you plan to
+   redistribute, publish, commercialize, or further relicense this codebase, you
+   should first confirm authorization from the original upstream rights holders.
+
+5. Third-party dependencies remain subject to their own respective licenses.
+
+Attribution:
+- Original project: https://github.com/F6JO/RouteVulScan
+- Original project name: RouteVulScan
+
+If the upstream project later publishes an official license, maintainers of this
+repository should review and update this file accordingly.

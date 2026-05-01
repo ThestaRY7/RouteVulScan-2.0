@@ -1,6 +1,7 @@
 package yaml;
 
 import burp.BurpExtender;
+import burp.I18n;
 import func.init_Yaml_thread;
 import org.yaml.snakeyaml.Yaml;
 
@@ -42,7 +43,7 @@ public class YamlUtil {
                 data.put("Bypass_List", new ArrayList<String>());
             }
         } catch (Throwable e) {
-            BurpExtender.logStaticError("读取 YAML 配置失败: " + file_path, e);
+            BurpExtender.logStaticError(I18n.t("log.readYamlFailed", file_path), e);
         }
         return data;
     }
@@ -64,7 +65,7 @@ public class YamlUtil {
             yaml.dump(saveData, writer);
             writer.close();
         } catch (FileNotFoundException e) {
-            BurpExtender.logStaticError("写入 YAML 配置失败: " + filePath, e);
+            BurpExtender.logStaticError(I18n.t("log.writeYamlFailed", filePath), e);
         }
     }
 
@@ -202,4 +203,3 @@ public class YamlUtil {
 
 
 }
-

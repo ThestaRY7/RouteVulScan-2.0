@@ -91,6 +91,10 @@ public class View extends AbstractTableModel {
         return this.top;
     }
 
+    public void refreshLanguage() {
+        fireTableStructureChanged();
+    }
+
     //
     // 扩展AbstractTableModel
     //
@@ -111,19 +115,19 @@ public class View extends AbstractTableModel {
     public String getColumnName(int columnIndex) {
         switch (columnIndex) {
             case 0:
-                return "启用";
+                return burp.t("table.rule.enabled");
             case 1:
-                return "名称";
+                return burp.t("table.rule.name");
             case 2:
-                return "方法";
+                return burp.t("table.rule.method");
             case 3:
-                return "路径";
+                return burp.t("table.rule.path");
             case 4:
-                return "正则";
+                return burp.t("table.rule.regex");
             case 5:
-                return "说明";
+                return burp.t("table.rule.info");
             case 6:
-                return "状态码";
+                return burp.t("table.rule.status");
             default:
                 return "";
         }

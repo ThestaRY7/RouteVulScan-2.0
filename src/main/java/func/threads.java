@@ -30,11 +30,18 @@ public class threads implements Runnable {
 
     @Override
     public void run() {
-        vul.burp.noteTaskStarted();
+        if (vul.isCancelled()) {
+            return;
+        }
+        boolean counted = false;
         try {
+            vul.burp.noteTaskStarted();
+            counted = true;
             go(this.zidian, this.vul, this.newHttpRequestResponse, this.heads, this.bypassList);
         } finally {
-            vul.burp.noteTaskFinished();
+            if (counted && !vul.isCancelled()) {
+                vul.burp.noteTaskFinished();
+            }
         }
     }
 
@@ -59,7 +66,7 @@ public class threads implements Runnable {
             URL seedUrl = new URL(source.request().url());
             url = new URL(seedUrl.getProtocol(), seedUrl.getHost(), seedUrl.getPort(), String.valueOf(vul.Path_record) + urll);
         } catch (MalformedURLException e) {
-            vul.burp.logError("构造扫描 URL 失败", e);
+            vul.burp.logError(vul.burp.t("log.buildScanUrlFailed"), e);
             return;
         }
 
@@ -92,6 +99,9 @@ public class threads implements Runnable {
     }
 
     private static boolean matchResponse(vulscan vul, String name, String info, String re, Collection<Integer> states, HttpRequestResponse response) {
+        if (vul.isCancelled()) {
+            return false;
+        }
         int statusCode = response.response().statusCode();
         if (!states.contains(statusCode)) {
             return false;
