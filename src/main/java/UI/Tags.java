@@ -11,7 +11,6 @@ import burp.api.montoya.ui.editor.HttpResponseEditor;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
-import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
@@ -37,13 +36,18 @@ public class Tags extends AbstractTableModel {
     private JSplitPane top;
     private JSplitPane splitPane;
     private JSplitPane HjSplitPane;
+    private JTabbedPane tabs;
     private JTabbedPane Ltable;
     private JTabbedPane Rtable;
     private JPopupMenu m_popupMenu;
+    private JMenuItem delMenItem;
+    private JMenuItem delAllMenItem;
     private JLabel statusLabel;
     private JCheckBox enableFilterCheckBox;
     private JLabel thresholdLabel;
     private JSpinner thresholdSpinner;
+    private JButton refreshButton;
+    private JButton clearButton;
     public URLTable Utable;
     private JScrollPane UscrollPane;
     public List<TablesData> Udatas = new ArrayList<TablesData>();
@@ -67,19 +71,23 @@ public class Tags extends AbstractTableModel {
         }
     }
 
+    private String t(String key, Object... args) {
+        return burp.t(key, args);
+    }
+
     private void buildUi() {
         try {
             this.top = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-            JTabbedPane tabs = new JTabbedPane();
+            tabs = new JTabbedPane();
             splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
 
             JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-            enableFilterCheckBox = new JCheckBox("启用重复 Size 过滤");
+            enableFilterCheckBox = new JCheckBox(t("checkbox.duplicateFilter"));
             enableFilterCheckBox.setSelected(false);
-            enableFilterCheckBox.setToolTipText("启用后将过滤同一 Host 下相同响应长度的结果");
+            enableFilterCheckBox.setToolTipText(t("tooltip.duplicateFilter"));
             enableFilterCheckBox.addActionListener(e -> refreshTable());
 
-            thresholdLabel = new JLabel("重复阈值：");
+            thresholdLabel = new JLabel(t("label.duplicateThreshold"));
             thresholdSpinner = new JSpinner(new SpinnerNumberModel(5, 2, 100, 1));
             thresholdSpinner.addChangeListener(e -> refreshTable());
 
@@ -87,24 +95,24 @@ public class Tags extends AbstractTableModel {
             filterPanel.add(thresholdLabel);
             filterPanel.add(thresholdSpinner);
 
-            JButton refreshButton = new JButton("刷新显示");
+            refreshButton = new JButton(t("button.refreshView"));
             refreshButton.addActionListener(e -> refreshTable());
             filterPanel.add(refreshButton);
 
-            JButton clearButton = new JButton("清除历史");
+            clearButton = new JButton(t("button.clearHistory"));
             clearButton.addActionListener(e -> clearHistory());
             filterPanel.add(clearButton);
 
-            statusLabel = new JLabel("显示 0 / 0 条记录");
+            statusLabel = new JLabel(t("status.records", 0, 0));
             filterPanel.add(statusLabel);
 
             Utable = new URLTable(this);
             UscrollPane = new JScrollPane(Utable);
 
             m_popupMenu = new JPopupMenu();
-            JMenuItem delMenItem = new JMenuItem("删除选中项");
+            delMenItem = new JMenuItem(t("menu.deleteSelected"));
             delMenItem.addActionListener(new Remove_action(this));
-            JMenuItem delAllMenItem = new JMenuItem("清空全部历史");
+            delAllMenItem = new JMenuItem(t("menu.clearAllHistory"));
             delAllMenItem.addActionListener(new Remove_All(this));
             m_popupMenu.add(delMenItem);
             m_popupMenu.add(delAllMenItem);
@@ -127,24 +135,45 @@ public class Tags extends AbstractTableModel {
             Rtable = new JTabbedPane();
             HRequestTextEditor = burp.api.userInterface().createHttpRequestEditor(EditorOptions.READ_ONLY);
             HResponseTextEditor = burp.api.userInterface().createHttpResponseEditor(EditorOptions.READ_ONLY);
-            Ltable.addTab("请求", HRequestTextEditor.uiComponent());
-            Rtable.addTab("响应", HResponseTextEditor.uiComponent());
+            Ltable.addTab(t("tab.request"), HRequestTextEditor.uiComponent());
+            Rtable.addTab(t("tab.response"), HResponseTextEditor.uiComponent());
             HjSplitPane.add(Ltable, "left");
             HjSplitPane.add(Rtable, "right");
 
             splitPane.add(tablePanel, "left");
             splitPane.add(HjSplitPane, "right");
-            tabs.addTab("漏洞结果", splitPane);
-            tabs.addTab("配置", config.$$$getRootComponent$$$());
+            tabs.addTab(t("tab.results"), splitPane);
+            tabs.addTab(t("tab.config"), config.$$$getRootComponent$$$());
             top.setTopComponent(tabs);
             burp.api.userInterface().applyThemeToComponent(top);
         } catch (Throwable t) {
-            BurpExtender.logStaticError("初始化结果标签页失败", t);
+            BurpExtender.logStaticError(burp.t("log.initResultsFailed"), t);
         }
     }
 
     public Component getUiComponent() {
         return this.top;
+    }
+
+    public void refreshLanguage() {
+        if (top == null) {
+            return;
+        }
+        SwingUtilities.invokeLater(() -> {
+            enableFilterCheckBox.setText(t("checkbox.duplicateFilter"));
+            enableFilterCheckBox.setToolTipText(t("tooltip.duplicateFilter"));
+            thresholdLabel.setText(t("label.duplicateThreshold"));
+            refreshButton.setText(t("button.refreshView"));
+            clearButton.setText(t("button.clearHistory"));
+            delMenItem.setText(t("menu.deleteSelected"));
+            delAllMenItem.setText(t("menu.clearAllHistory"));
+            Ltable.setTitleAt(0, t("tab.request"));
+            Rtable.setTitleAt(0, t("tab.response"));
+            tabs.setTitleAt(0, t("tab.results"));
+            tabs.setTitleAt(1, t("tab.config"));
+            fireTableStructureChanged();
+            refreshTable();
+        });
     }
 
     public void addLogEntry(String name, String method, String url, String state, String info, String length, HttpRequestResponse requestResponse) {
@@ -162,7 +191,7 @@ public class Tags extends AbstractTableModel {
             if (!enableFilterCheckBox.isSelected() || shouldShowEntry(entry)) {
                 add(name, method, url, state, info, length, requestResponse);
             }
-            statusLabel.setText("显示 " + Udatas.size() + " / " + logEntries.size() + " 条记录");
+            updateStatusLabel();
         });
     }
 
@@ -170,7 +199,7 @@ public class Tags extends AbstractTableModel {
         try {
             return new URL(url).getHost();
         } catch (Exception e) {
-            return "未知";
+            return t("status.unknown");
         }
     }
 
@@ -220,7 +249,7 @@ public class Tags extends AbstractTableModel {
             if (selectedRow >= 0 && selectedRow < Udatas.size()) {
                 Utable.setRowSelectionInterval(selectedRow, selectedRow);
             }
-            statusLabel.setText("显示 " + Udatas.size() + " / " + logEntries.size() + " 条记录");
+            updateStatusLabel();
         });
     }
 
@@ -239,7 +268,7 @@ public class Tags extends AbstractTableModel {
         if (top == null || statusLabel == null || HRequestTextEditor == null || HResponseTextEditor == null) {
             return;
         }
-        int result = JOptionPane.showConfirmDialog(top, "确定要清除所有历史记录吗？", "确认清除", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+        int result = JOptionPane.showConfirmDialog(top, t("confirm.clearHistory"), t("dialog.clearConfirm"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
         if (result == JOptionPane.YES_OPTION) {
             synchronized (logEntries) {
                 logEntries.clear();
@@ -251,8 +280,42 @@ public class Tags extends AbstractTableModel {
             fireTableDataChanged();
             HRequestTextEditor.setRequest(HttpRequest.httpRequest(""));
             HResponseTextEditor.setResponse(HttpResponse.httpResponse(""));
-            statusLabel.setText("显示 0 / 0 条记录");
+            updateStatusLabel();
         }
+    }
+
+    public void clearDisplayedHistory() {
+        while (Udatas.size() != 0) {
+            Udatas.remove(0);
+            fireTableRowsDeleted(0, 0);
+        }
+        HRequestTextEditor.setRequest(HttpRequest.httpRequest(""));
+        HResponseTextEditor.setResponse(HttpResponse.httpResponse(""));
+        updateStatusLabel();
+    }
+
+    public void removeSelectedRows() {
+        int[] remId = Utable.getSelectedRows();
+        for (int i : reversal(remId)) {
+            Udatas.remove(i);
+            fireTableRowsDeleted(i, i);
+            HRequestTextEditor.setRequest(HttpRequest.httpRequest(""));
+            HResponseTextEditor.setResponse(HttpResponse.httpResponse(""));
+        }
+        updateStatusLabel();
+    }
+
+    private Integer[] reversal(int[] intArray) {
+        Integer[] newScores = new Integer[intArray.length];
+        for (int i = 0; i < intArray.length; i++) {
+            newScores[i] = intArray[i];
+        }
+        Arrays.sort(newScores, Collections.reverseOrder());
+        return newScores;
+    }
+
+    private void updateStatusLabel() {
+        statusLabel.setText(t("status.records", Udatas.size(), logEntries.size()));
     }
 
     @Override
@@ -271,21 +334,21 @@ public class Tags extends AbstractTableModel {
             case 0:
                 return "#";
             case 1:
-                return "漏洞名称";
+                return t("table.result.name");
             case 2:
-                return "请求方法";
+                return t("table.result.method");
             case 3:
-                return "URL";
+                return t("table.result.url");
             case 4:
-                return "状态码";
+                return t("table.result.status");
             case 5:
-                return "说明";
+                return t("table.result.info");
             case 6:
-                return "长度";
+                return t("table.result.length");
             case 7:
-                return "开始时间";
+                return t("table.result.start");
             case 8:
-                return "结束时间";
+                return t("table.result.end");
             default:
                 return "";
         }
@@ -377,11 +440,8 @@ public class Tags extends AbstractTableModel {
                 }
             }
 
-            String columnName = getColumnModel().getColumn(columnIndex).getHeaderValue().toString();
-            if (columnName.equals("长度") || columnName.equals("状态码")) {
-                sorter.setComparator(columnIndex, Comparator.comparingInt((String value) -> Integer.parseInt(value)));
-            } else if (columnName.equals("开始时间")) {
-                sorter.setComparator(columnIndex, Comparator.naturalOrder());
+            if (columnIndex == 4 || columnIndex == 6) {
+                sorter.setComparator(columnIndex, Comparator.comparingInt((String value) -> Integer.parseInt(value.trim())));
             } else {
                 sorter.setComparator(columnIndex, Comparator.naturalOrder());
             }
@@ -459,12 +519,7 @@ class Remove_All implements ActionListener {
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        while (tag.Udatas.size() != 0) {
-            tag.Udatas.remove(0);
-            tag.fireTableRowsDeleted(0, 0);
-        }
-        tag.HRequestTextEditor.setRequest(HttpRequest.httpRequest(""));
-        tag.HResponseTextEditor.setResponse(HttpResponse.httpResponse(""));
+        tag.clearDisplayedHistory();
     }
 }
 
@@ -477,21 +532,6 @@ class Remove_action implements ActionListener {
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        int[] remId = tag.Utable.getSelectedRows();
-        for (int i : reversal(remId)) {
-            tag.Udatas.remove(i);
-            tag.fireTableRowsDeleted(i, i);
-            tag.HRequestTextEditor.setRequest(HttpRequest.httpRequest(""));
-            tag.HResponseTextEditor.setResponse(HttpResponse.httpResponse(""));
-        }
-    }
-
-    public Integer[] reversal(int[] int_array) {
-        Integer[] newScores = new Integer[int_array.length];
-        for (int i = 0; i < int_array.length; i++) {
-            newScores[i] = int_array[i];
-        }
-        Arrays.sort(newScores, Collections.reverseOrder());
-        return newScores;
+        tag.removeSelectedRows();
     }
 }

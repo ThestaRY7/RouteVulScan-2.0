@@ -10,6 +10,10 @@ public class DomainNameRepeat {
         return this.domainNameMap;
     }
 
+    public void clear() {
+        getDomainNameMap().clear();
+    }
+
     public void add(String domainName) {
         if (domainName == null || domainName.length() <= 0)
             throw new IllegalArgumentException("Domain name cannot be empty");
@@ -27,4 +31,3 @@ public class DomainNameRepeat {
 //        return false;
 //    }
 }
-

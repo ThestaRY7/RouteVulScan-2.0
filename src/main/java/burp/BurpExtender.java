@@ -46,7 +46,8 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
 
     public static String Yaml_Path = System.getProperty("user.dir") + "/" + "Config_yaml.yaml";
     public static String EXPAND_NAME = "Route Vulnerable Scan";
-    public static String VERSION = "2.0.0";
+    public static String VERSION = "2.0.1";
+    private static final String LANGUAGE_PREFERENCE_KEY = "routevulscan.language";
     public static String Download_Yaml_protocol = "https";
     public static String Download_Yaml_host = "raw.githubusercontent.com";
     public static int Download_Yaml_port = 443;
@@ -83,6 +84,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
         this.api = api;
         this.logging = api.logging();
         staticLogging = this.logging;
+        I18n.setLanguage(loadLanguagePreference());
         api.extension().setName(EXPAND_NAME + " " + VERSION);
         api.extension().registerUnloadingHandler(new ExtensionUnloadingHandler() {
             @Override
@@ -110,8 +112,41 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
             logInfo("@Version: RouteVulScan " + VERSION);
             logInfo("@From: Code by 风沙吹奏");
         } catch (Throwable t) {
-            logError("插件初始化失败", t);
+            logError(t("log.pluginInitFailed"), t);
         }
+    }
+
+    private String loadLanguagePreference() {
+        if (api == null) {
+            return I18n.DEFAULT_LANGUAGE;
+        }
+        try {
+            String language = api.persistence().preferences().getString(LANGUAGE_PREFERENCE_KEY);
+            return language == null || language.trim().isEmpty() ? I18n.DEFAULT_LANGUAGE : language;
+        } catch (Throwable t) {
+            return I18n.DEFAULT_LANGUAGE;
+        }
+    }
+
+    public void setLanguage(String language) {
+        I18n.setLanguage(language);
+        if (api != null) {
+            api.persistence().preferences().setString(LANGUAGE_PREFERENCE_KEY, I18n.language());
+        }
+        if (Config_l != null) {
+            Config_l.refreshLanguage();
+        }
+        if (tags != null) {
+            tags.refreshLanguage();
+        }
+    }
+
+    public String getLanguage() {
+        return I18n.language();
+    }
+
+    public String t(String key, Object... args) {
+        return I18n.t(key, args);
     }
 
     public synchronized int getConfiguredThreadCount() {
@@ -239,6 +274,18 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
         notifyProgressChanged();
     }
 
+    public synchronized void resetScanProgressAndReloadRules() {
+        scanGeneration.incrementAndGet();
+        resetThreadPool();
+        history_url.clear();
+        urlC.clear();
+        domainNameRepeat.clear();
+        resetScanMetrics();
+        if (Config_l != null) {
+            Config_l.reloadRulesFromDisk();
+        }
+    }
+
     public void notifyProgressChanged() {
         if (Config_l != null) {
             Config_l.refreshProgressView();
@@ -313,7 +360,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
                 handlePassiveCandidate(requestResponse, "HTTP");
             }
         } catch (Throwable t) {
-            logError("处理 HTTP 响应失败", t);
+            logError(t("log.httpFailed"), t);
         }
         return ResponseReceivedAction.continueWith(responseReceived);
     }
@@ -324,7 +371,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
         }
         try {
             if (Host_txtfield == null) {
-                logError("被动扫描未启动：Host 过滤框尚未初始化。");
+                logError(t("log.passiveNoHost"));
                 return;
             }
             String host = requestResponse.httpService().host();
@@ -344,12 +391,12 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
             try {
                 domainNameRepeat.add(rootUrl);
             } catch (Throwable t) {
-                logError("记录域名去重失败: " + rootUrl, t);
+                logError(t("log.domainRecordFailed", rootUrl), t);
             }
             ensureThreadPool();
             new vulscan(this, requestResponse, null, source);
         } catch (Throwable t) {
-            logError("触发被动扫描失败 [" + source + "]", t);
+            logError(t("log.passiveTriggerFailed", source), t);
         }
     }
 
@@ -360,10 +407,10 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
             return Collections.emptyList();
         }
 
-        JMenuItem scan = new JMenuItem("发送到 RouteVulScan");
+        JMenuItem scan = new JMenuItem(t("menu.send"));
         scan.addActionListener(new ManualScanAction(this, selected, false));
 
-        JMenuItem scanWithHeaders = new JMenuItem("发送到 RouteVulScan 并携带请求头");
+        JMenuItem scanWithHeaders = new JMenuItem(t("menu.sendWithHeaders"));
         scanWithHeaders.addActionListener(new ManualScanAction(this, selected, true));
 
         List<Component> items = new ArrayList<Component>();
@@ -386,12 +433,12 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
 
     public void startManualScan(List<HttpRequestResponse> selected, boolean customHeaders) {
         if (selected == null || selected.isEmpty()) {
-            logError("主动扫描失败：未选中任何请求。");
+            logError(t("log.manualNoSelection"));
             return;
         }
         if (!customHeaders) {
             for (HttpRequestResponse requestResponse : selected) {
-                new vulscan(this, requestResponse, null, "手动发送");
+                new vulscan(this, requestResponse, null, t("menu.send"));
             }
             return;
         }
@@ -410,7 +457,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
         int result = JOptionPane.showConfirmDialog(
                 tags != null ? tags.getUiComponent() : null,
                 new JScrollPane(textArea),
-                "自定义请求头",
+                t("dialog.customHeaders"),
                 JOptionPane.OK_CANCEL_OPTION,
                 JOptionPane.PLAIN_MESSAGE
         );
@@ -420,16 +467,16 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
 
         List<String> lines = parseHeaderLines(textArea.getText());
         if (lines == null) {
-            prompt(null, "请求头格式不正确。");
+            prompt(null, t("prompt.invalidHeaders"));
             return;
         }
 
         for (HttpRequestResponse requestResponse : selected) {
             try {
                 HttpRequest request = applyCustomHeaders(requestResponse.request(), lines);
-                new vulscan(this, requestResponse, request, "手动发送");
+                new vulscan(this, requestResponse, request, t("menu.send"));
             } catch (Throwable t) {
-                logError("应用自定义请求头失败", t);
+                logError(this.t("log.applyHeadersFailed"), t);
             }
         }
     }

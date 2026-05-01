@@ -21,11 +21,19 @@ public class Config {
     public JTabbedPane ruleTabbedPane;
 
     private JTextField hostFilterField;
+    private JComboBox<LanguageOption> languageBox;
     private JLabel setupSummaryLabel;
     private JLabel progressSummaryLabel;
     private JLabel pathsProgressLabel;
     private JLabel workersProgressLabel;
     private JLabel resultProgressLabel;
+
+    private JButton scanningButton;
+    private JButton headersButton;
+    private JButton domainButton;
+    private JButton bypassButton;
+    private JCheckBox ruleEnabledCheck;
+    private JLabel editorStateLabel;
 
     private JTextField ruleNameField;
     private JComboBox<String> ruleMethodBox;
@@ -34,13 +42,16 @@ public class Config {
     private JTextArea ruleRegexArea;
     private JTextArea ruleInfoArea;
     private JTextField ruleStateField;
-    private JCheckBox ruleEnabledCheck;
-    private JLabel editorStateLabel;
 
     private String editingRuleId;
+    private boolean refreshingLanguage;
 
     public Config(BurpExtender burp) {
         this.burp = burp;
+    }
+
+    private String t(String key, Object... args) {
+        return burp.t(key, args);
     }
 
     private void $$$setupUI$$$() {
@@ -70,40 +81,40 @@ public class Config {
     }
 
     private JPanel buildScanControlPanel() {
-        JPanel panel = createSectionPanel("扫描控制");
+        JPanel panel = createSectionPanel("section.scanControl");
         panel.setLayout(new BorderLayout(12, 8));
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
 
-        JButton scanningButton = new JButton();
-        applyToggleState(scanningButton, burp.on_off, "被动扫描");
+        scanningButton = new JButton();
+        applyToggleState(scanningButton, burp.on_off, "button.passiveScan");
         scanningButton.addActionListener(e -> {
             burp.on_off = !burp.on_off;
-            applyToggleState(scanningButton, burp.on_off, "被动扫描");
+            applyToggleState(scanningButton, burp.on_off, "button.passiveScan");
             updateStatusLabel();
         });
 
-        JButton headersButton = new JButton();
-        applyToggleState(headersButton, burp.Carry_head, "携带请求头");
+        headersButton = new JButton();
+        applyToggleState(headersButton, burp.Carry_head, "button.carryHeaders");
         headersButton.addActionListener(e -> {
             burp.Carry_head = !burp.Carry_head;
-            applyToggleState(headersButton, burp.Carry_head, "携带请求头");
+            applyToggleState(headersButton, burp.Carry_head, "button.carryHeaders");
             updateStatusLabel();
         });
 
-        JButton domainButton = new JButton();
-        applyToggleState(domainButton, burp.DomainScan, "域名扫描");
+        domainButton = new JButton();
+        applyToggleState(domainButton, burp.DomainScan, "button.domainScan");
         domainButton.addActionListener(e -> {
             burp.DomainScan = !burp.DomainScan;
-            applyToggleState(domainButton, burp.DomainScan, "域名扫描");
+            applyToggleState(domainButton, burp.DomainScan, "button.domainScan");
             updateStatusLabel();
         });
 
-        JButton bypassButton = new JButton();
-        applyToggleState(bypassButton, burp.Bypass, "绕过扫描");
+        bypassButton = new JButton();
+        applyToggleState(bypassButton, burp.Bypass, "button.bypassScan");
         bypassButton.addActionListener(e -> {
             burp.Bypass = !burp.Bypass;
-            applyToggleState(bypassButton, burp.Bypass, "绕过扫描");
+            applyToggleState(bypassButton, burp.Bypass, "button.bypassScan");
             updateStatusLabel();
         });
 
@@ -119,14 +130,28 @@ public class Config {
         hostFilterField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::syncHostFilter));
         burp.Host_txtfield = hostFilterField;
 
+        languageBox = new JComboBox<LanguageOption>();
+        populateLanguageBox();
+        languageBox.addActionListener(e -> {
+            if (refreshingLanguage) {
+                return;
+            }
+            Object selected = languageBox.getSelectedItem();
+            if (selected instanceof LanguageOption) {
+                burp.setLanguage(((LanguageOption) selected).code);
+            }
+        });
+
         controls.add(scanningButton);
         controls.add(headersButton);
         controls.add(domainButton);
         controls.add(bypassButton);
-        controls.add(new JLabel("线程数"));
+        controls.add(localizedLabel("label.threads"));
         controls.add(spinner1);
-        controls.add(new JLabel("主机过滤"));
+        controls.add(localizedLabel("label.hostFilter"));
         controls.add(hostFilterField);
+        controls.add(localizedLabel("label.language"));
+        controls.add(languageBox);
 
         setupSummaryLabel = new JLabel();
         setupSummaryLabel.setForeground(new Color(80, 80, 80));
@@ -138,16 +163,16 @@ public class Config {
     }
 
     private JPanel buildRuleSourcePanel() {
-        JPanel panel = createSectionPanel("规则来源");
+        JPanel panel = createSectionPanel("section.ruleSource");
         panel.setLayout(new BorderLayout(12, 8));
 
         txtfield1 = new JTextField(yaml_path);
         txtfield1.setEditable(false);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        JButton updateButton = new JButton("更新规则");
+        JButton updateButton = localizedButton("button.updateRules");
         updateButton.addActionListener(e -> YamlUtil.init_Yaml(burp, one));
-        JButton reloadButton = new JButton("重新加载规则");
+        JButton reloadButton = localizedButton("button.reloadRules");
         reloadButton.addActionListener(e -> reloadRulesAndRestoreSelection(getCurrentGroupName(), editingRuleId));
         buttons.add(updateButton);
         buttons.add(reloadButton);
@@ -158,7 +183,7 @@ public class Config {
     }
 
     private JPanel buildProgressPanel() {
-        JPanel panel = createSectionPanel("扫描进度");
+        JPanel panel = createSectionPanel("section.progress");
         panel.setLayout(new BorderLayout(12, 8));
 
         JPanel metrics = new JPanel(new GridLayout(0, 1, 0, 4));
@@ -172,10 +197,10 @@ public class Config {
         metrics.add(resultProgressLabel);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        JButton cancelButton = new JButton("取消运行中扫描");
+        JButton cancelButton = localizedButton("button.cancelScans");
         cancelButton.addActionListener(e -> burp.cancelActiveScans());
-        JButton resetButton = new JButton("重置进度");
-        resetButton.addActionListener(e -> burp.resetScanMetrics());
+        JButton resetButton = localizedButton("button.resetProgress");
+        resetButton.addActionListener(e -> burp.resetScanProgressAndReloadRules());
         buttons.add(cancelButton);
         buttons.add(resetButton);
 
@@ -186,17 +211,17 @@ public class Config {
     }
 
     private JPanel buildRuleBrowserPanel() {
-        JPanel panel = createSectionPanel("规则列表");
+        JPanel panel = createSectionPanel("section.ruleList");
         panel.setLayout(new BorderLayout(8, 8));
 
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        JButton newRuleButton = new JButton("新建规则");
+        JButton newRuleButton = localizedButton("button.newRule");
         newRuleButton.addActionListener(e -> prepareNewRuleForGroup(getCurrentGroupName()));
-        JButton newGroupButton = new JButton("新建规则组");
+        JButton newGroupButton = localizedButton("button.newGroup");
         newGroupButton.addActionListener(e -> createGroupDraft());
-        JButton renameGroupButton = new JButton("重命名规则组");
+        JButton renameGroupButton = localizedButton("button.renameGroup");
         renameGroupButton.addActionListener(e -> renameCurrentGroup());
-        JButton deleteGroupButton = new JButton("删除规则组");
+        JButton deleteGroupButton = localizedButton("button.deleteGroup");
         deleteGroupButton.addActionListener(e -> deleteCurrentGroup());
         toolbar.add(newRuleButton);
         toolbar.add(newGroupButton);
@@ -213,7 +238,7 @@ public class Config {
     }
 
     private JPanel buildRuleEditorPanel() {
-        JPanel panel = createSectionPanel("规则编辑器");
+        JPanel panel = createSectionPanel("section.ruleEditor");
         panel.setLayout(new BorderLayout(8, 8));
 
         JPanel form = new JPanel(new GridBagLayout());
@@ -237,16 +262,17 @@ public class Config {
         ruleInfoArea.setLineWrap(true);
         ruleInfoArea.setWrapStyleWord(true);
         ruleStateField = new JTextField("200");
-        ruleEnabledCheck = new JCheckBox("启用规则");
+        ruleEnabledCheck = new JCheckBox(t("checkbox.enableRule"));
+        ruleEnabledCheck.putClientProperty("i18n.textKey", "checkbox.enableRule");
         ruleEnabledCheck.setSelected(true);
 
-        addFormRow(form, gbc, "规则名称", ruleNameField);
-        addFormRow(form, gbc, "请求方法", ruleMethodBox);
-        addFormRow(form, gbc, "规则组", ruleGroupBox);
-        addFormRow(form, gbc, "路径后缀", ruleUrlField);
-        addFormRow(form, gbc, "响应正则", new JScrollPane(ruleRegexArea));
-        addFormRow(form, gbc, "说明 / 备注", new JScrollPane(ruleInfoArea));
-        addFormRow(form, gbc, "匹配状态码", ruleStateField);
+        addFormRow(form, gbc, "form.ruleName", ruleNameField);
+        addFormRow(form, gbc, "form.method", ruleMethodBox);
+        addFormRow(form, gbc, "form.group", ruleGroupBox);
+        addFormRow(form, gbc, "form.pathSuffix", ruleUrlField);
+        addFormRow(form, gbc, "form.responseRegex", new JScrollPane(ruleRegexArea));
+        addFormRow(form, gbc, "form.info", new JScrollPane(ruleInfoArea));
+        addFormRow(form, gbc, "form.statusCodes", ruleStateField);
 
         gbc.gridx = 1;
         gbc.weightx = 1;
@@ -254,17 +280,17 @@ public class Config {
         gbc.gridy++;
 
         JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        JButton saveButton = new JButton("保存规则");
+        JButton saveButton = localizedButton("button.saveRule");
         saveButton.addActionListener(e -> saveRuleFromEditor());
-        JButton clearButton = new JButton("清空编辑器");
+        JButton clearButton = localizedButton("button.clearEditor");
         clearButton.addActionListener(e -> prepareNewRuleForGroup(getSelectedEditorGroup()));
-        JButton deleteButton = new JButton("删除规则");
+        JButton deleteButton = localizedButton("button.deleteRule");
         deleteButton.addActionListener(e -> deleteCurrentRule());
         buttonRow.add(saveButton);
         buttonRow.add(clearButton);
         buttonRow.add(deleteButton);
 
-        editorStateLabel = new JLabel("请从左侧选择规则，或新建一条规则。");
+        editorStateLabel = new JLabel(t("editor.selectOrNew"));
         editorStateLabel.setForeground(new Color(80, 80, 80));
 
         panel.add(form, BorderLayout.CENTER);
@@ -275,29 +301,43 @@ public class Config {
         return panel;
     }
 
-    private JPanel createSectionPanel(String title) {
+    private JPanel createSectionPanel(String titleKey) {
         JPanel panel = new JPanel();
+        panel.putClientProperty("i18n.titleKey", titleKey);
         panel.setBorder(BorderFactory.createTitledBorder(
                 BorderFactory.createEtchedBorder(),
-                title,
+                t(titleKey),
                 TitledBorder.LEADING,
                 TitledBorder.TOP
         ));
         return panel;
     }
 
-    private void addFormRow(JPanel panel, GridBagConstraints gbc, String label, Component component) {
+    private JLabel localizedLabel(String key) {
+        JLabel label = new JLabel(t(key));
+        label.putClientProperty("i18n.textKey", key);
+        return label;
+    }
+
+    private JButton localizedButton(String key) {
+        JButton button = new JButton(t(key));
+        button.putClientProperty("i18n.textKey", key);
+        return button;
+    }
+
+    private void addFormRow(JPanel panel, GridBagConstraints gbc, String labelKey, Component component) {
         gbc.gridx = 0;
         gbc.weightx = 0;
-        panel.add(new JLabel(label), gbc);
+        panel.add(localizedLabel(labelKey), gbc);
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(component, gbc);
         gbc.gridy++;
     }
 
-    private void applyToggleState(JButton button, boolean enabled, String label) {
-        button.setText(label + "：" + (enabled ? "开启" : "关闭"));
+    private void applyToggleState(JButton button, boolean enabled, String labelKey) {
+        button.putClientProperty("i18n.toggleKey", labelKey);
+        button.setText(t("toggle.state", t(labelKey), t(enabled ? "state.on" : "state.off")));
         button.setBackground(enabled ? Color.green : UIManager.getColor("Button.background"));
     }
 
@@ -313,13 +353,13 @@ public class Config {
             return;
         }
         setupSummaryLabel.setText(
-                "当前配置："
-                        + (burp.on_off ? "被动扫描已开启" : "被动扫描已关闭")
-                        + " | 线程数 " + burp.getConfiguredThreadCount()
-                        + " | 请求头 " + (burp.Carry_head ? "开启" : "关闭")
-                        + " | 域名扫描 " + (burp.DomainScan ? "开启" : "关闭")
-                        + " | 绕过扫描 " + (burp.Bypass ? "开启" : "关闭")
-                        + " | 过滤器 " + hostFilterField.getText().trim()
+                t("label.currentConfig")
+                        + (burp.on_off ? t("label.passiveOn") : t("label.passiveOff"))
+                        + " | " + t("label.threads") + " " + burp.getConfiguredThreadCount()
+                        + " | " + t("label.headers") + " " + (burp.Carry_head ? t("state.on") : t("state.off"))
+                        + " | " + t("label.domainScan") + " " + (burp.DomainScan ? t("state.on") : t("state.off"))
+                        + " | " + t("label.bypassScan") + " " + (burp.Bypass ? t("state.on") : t("state.off"))
+                        + " | " + t("label.filter") + " " + hostFilterField.getText().trim()
         );
     }
 
@@ -328,23 +368,10 @@ public class Config {
             return;
         }
         SwingUtilities.invokeLater(() -> {
-            progressSummaryLabel.setText(
-                    "活动扫描数 " + burp.getActiveScanCount()
-                            + " | 代次 " + burp.getScanGeneration()
-            );
-            pathsProgressLabel.setText(
-                    "已排队路径 " + burp.getPathsQueuedCount()
-                            + " | 已完成路径 " + burp.getPathsCompletedCount()
-                            + " | 已跳过 " + burp.getSkippedPathCount()
-            );
-            workersProgressLabel.setText(
-                    "运行中任务 " + burp.getRunningTaskCount()
-                            + " | 已完成任务 " + burp.getFinishedTaskCount()
-            );
-            resultProgressLabel.setText(
-                    "命中结果 " + burp.getMatchCount()
-                            + " | 超时次数 " + burp.getTimeoutCount()
-            );
+            progressSummaryLabel.setText(t("progress.summary", burp.getActiveScanCount(), burp.getScanGeneration()));
+            pathsProgressLabel.setText(t("progress.paths", burp.getPathsQueuedCount(), burp.getPathsCompletedCount(), burp.getSkippedPathCount()));
+            workersProgressLabel.setText(t("progress.workers", burp.getRunningTaskCount(), burp.getFinishedTaskCount()));
+            resultProgressLabel.setText(t("progress.results", burp.getMatchCount(), burp.getTimeoutCount()));
         });
     }
 
@@ -358,6 +385,77 @@ public class Config {
     public void afterRulesReload() {
         refreshGroupChoices();
         handleGroupSelectionChanged();
+    }
+
+    public void reloadRulesFromDisk() {
+        reloadRulesAndRestoreSelection(getCurrentGroupName(), editingRuleId);
+    }
+
+    public void refreshLanguage() {
+        if (one == null) {
+            return;
+        }
+        SwingUtilities.invokeLater(() -> {
+            refreshingLanguage = true;
+            try {
+                refreshComponentText(one);
+                applyToggleState(scanningButton, burp.on_off, "button.passiveScan");
+                applyToggleState(headersButton, burp.Carry_head, "button.carryHeaders");
+                applyToggleState(domainButton, burp.DomainScan, "button.domainScan");
+                applyToggleState(bypassButton, burp.Bypass, "button.bypassScan");
+                populateLanguageBox();
+                updateStatusLabel();
+                refreshProgressView();
+                if (burp.views != null) {
+                    for (View view : burp.views.values()) {
+                        view.refreshLanguage();
+                    }
+                }
+                handleGroupSelectionChanged();
+            } finally {
+                refreshingLanguage = false;
+            }
+        });
+    }
+
+    private void refreshComponentText(Component component) {
+        if (component instanceof JComponent) {
+            JComponent jComponent = (JComponent) component;
+            Object textKey = jComponent.getClientProperty("i18n.textKey");
+            if (textKey != null) {
+                if (component instanceof AbstractButton) {
+                    ((AbstractButton) component).setText(t(textKey.toString()));
+                } else if (component instanceof JLabel) {
+                    ((JLabel) component).setText(t(textKey.toString()));
+                }
+            }
+            Object titleKey = jComponent.getClientProperty("i18n.titleKey");
+            if (titleKey != null && jComponent.getBorder() instanceof TitledBorder) {
+                ((TitledBorder) jComponent.getBorder()).setTitle(t(titleKey.toString()));
+                jComponent.repaint();
+            }
+        }
+        if (component instanceof Container) {
+            for (Component child : ((Container) component).getComponents()) {
+                refreshComponentText(child);
+            }
+        }
+    }
+
+    private void populateLanguageBox() {
+        if (languageBox == null) {
+            return;
+        }
+        String current = burp.getLanguage();
+        languageBox.removeAllItems();
+        languageBox.addItem(new LanguageOption(I18n.DEFAULT_LANGUAGE, t("language.zh")));
+        languageBox.addItem(new LanguageOption(I18n.ENGLISH_LANGUAGE, t("language.en")));
+        for (int i = 0; i < languageBox.getItemCount(); i++) {
+            if (languageBox.getItemAt(i).code.equals(current)) {
+                languageBox.setSelectedIndex(i);
+                break;
+            }
+        }
     }
 
     private void handleGroupSelectionChanged() {
@@ -386,7 +484,7 @@ public class Config {
         ruleInfoArea.setText(entry.info);
         ruleStateField.setText(entry.state);
         ruleEnabledCheck.setSelected(entry.loaded);
-        editorStateLabel.setText("正在编辑规则 #" + entry.id + "，所属规则组“" + entry.type + "”。");
+        editorStateLabel.setText(t("editor.editing", entry.id, entry.type));
     }
 
     private void prepareNewRuleForGroup(String groupName) {
@@ -405,13 +503,14 @@ public class Config {
         } else {
             ruleGroupBox.getEditor().setItem("default");
         }
-        editorStateLabel.setText("正在新建规则" + (getSelectedEditorGroup() == null ? "。" : "，所属规则组“" + getSelectedEditorGroup() + "”。"));
+        String selectedGroup = getSelectedEditorGroup();
+        editorStateLabel.setText(selectedGroup == null ? t("editor.newNoGroup") : t("editor.newWithGroup", selectedGroup));
     }
 
     private void saveRuleFromEditor() {
         String group = getSelectedEditorGroup();
         if (group == null || group.trim().isEmpty()) {
-            burp.prompt(one, "规则组不能为空。");
+            burp.prompt(one, t("prompt.groupRequired"));
             return;
         }
         String name = ruleNameField.getText().trim();
@@ -420,7 +519,7 @@ public class Config {
         String info = ruleInfoArea.getText().trim();
         String state = ruleStateField.getText().trim();
         if (name.isEmpty() || url.isEmpty() || regex.isEmpty() || state.isEmpty()) {
-            burp.prompt(one, "规则名称、路径后缀、响应正则和匹配状态码不能为空。");
+            burp.prompt(one, t("prompt.ruleRequired"));
             return;
         }
 
@@ -445,10 +544,10 @@ public class Config {
         if (editingRuleId == null) {
             YamlUtil.addYaml(saveMap, yaml_path);
             editingRuleId = String.valueOf(saveMap.get("id"));
-            editorStateLabel.setText("已创建规则 #" + editingRuleId + "。");
+            editorStateLabel.setText(t("editor.created", editingRuleId));
         } else {
             YamlUtil.updateYaml(saveMap, yaml_path);
-            editorStateLabel.setText("已保存规则 #" + editingRuleId + "。");
+            editorStateLabel.setText(t("editor.saved", editingRuleId));
         }
 
         reloadRulesAndRestoreSelection(group, editingRuleId);
@@ -456,10 +555,10 @@ public class Config {
 
     private void deleteCurrentRule() {
         if (editingRuleId == null) {
-            burp.prompt(one, "请先选择一条规则。");
+            burp.prompt(one, t("prompt.selectRuleFirst"));
             return;
         }
-        int result = JOptionPane.showConfirmDialog(one, "确认删除当前选中的规则吗？", "删除规则", JOptionPane.YES_NO_OPTION);
+        int result = JOptionPane.showConfirmDialog(one, t("confirm.deleteRule"), t("dialog.deleteRule"), JOptionPane.YES_NO_OPTION);
         if (result != JOptionPane.YES_OPTION) {
             return;
         }
@@ -470,7 +569,7 @@ public class Config {
     }
 
     private void createGroupDraft() {
-        String name = JOptionPane.showInputDialog(one, "请输入新的规则组名称", getCurrentGroupName() == null ? "default" : getCurrentGroupName());
+        String name = JOptionPane.showInputDialog(one, t("dialog.newGroup"), getCurrentGroupName() == null ? "default" : getCurrentGroupName());
         if (name == null || name.trim().isEmpty()) {
             return;
         }
@@ -478,16 +577,16 @@ public class Config {
         refreshGroupChoices();
         ruleGroupBox.setSelectedItem(normalized);
         prepareNewRuleForGroup(normalized);
-        editorStateLabel.setText("规则组草稿“" + normalized + "”已创建，请保存一条规则以正式写入。");
+        editorStateLabel.setText(t("editor.groupDraft", normalized));
     }
 
     private void renameCurrentGroup() {
         String current = getCurrentGroupName();
         if (current == null) {
-            burp.prompt(one, "当前没有可重命名的规则组。");
+            burp.prompt(one, t("prompt.noGroupToRename"));
             return;
         }
-        String renamed = JOptionPane.showInputDialog(one, "请输入新的规则组名称", current);
+        String renamed = JOptionPane.showInputDialog(one, t("dialog.renameGroup"), current);
         if (renamed == null || renamed.trim().isEmpty() || renamed.trim().equals(current)) {
             return;
         }
@@ -517,10 +616,10 @@ public class Config {
     private void deleteCurrentGroup() {
         String current = getCurrentGroupName();
         if (current == null) {
-            burp.prompt(one, "当前没有可删除的规则组。");
+            burp.prompt(one, t("prompt.noGroupToDelete"));
             return;
         }
-        int result = JOptionPane.showConfirmDialog(one, "确认删除整个规则组“" + current + "”吗？", "删除规则组", JOptionPane.YES_NO_OPTION);
+        int result = JOptionPane.showConfirmDialog(one, t("confirm.deleteGroup", current), t("dialog.deleteGroup"), JOptionPane.YES_NO_OPTION);
         if (result != JOptionPane.YES_OPTION) {
             return;
         }
@@ -595,6 +694,21 @@ public class Config {
     public JComponent $$$getRootComponent$$$() {
         $$$setupUI$$$();
         return one;
+    }
+
+    private static class LanguageOption {
+        private final String code;
+        private final String label;
+
+        private LanguageOption(String code, String label) {
+            this.code = code;
+            this.label = label;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
     }
 }
 

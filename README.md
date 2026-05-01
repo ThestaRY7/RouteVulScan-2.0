@@ -127,3 +127,11 @@ Extender -> Extensions -> Add
 - 原作者：F6JO
 
 [![Stargazers over time](https://starchart.cc/ThestaRY7/RouteVulScan-2.0.svg?variant=adaptive)](https://starchart.cc/ThestaRY7/RouteVulScan-2.0)
+
+
+
+## 免责声明
+
+本工具仅用于企业自身安全建设、甲方授权范围内的安全检测与风险排查，项目开发目的在于帮助甲方提升自身业务系统的安全防护能力。任何个人或组织在使用本工具前，应确保已获得目标系统的合法授权，并遵守所在国家或地区的相关法律法规。
+
+任何人因下载、安装、传播、使用或二次开发本工具所造成的任何直接或间接问题、损失、纠纷、违法违规后果，均由使用者自行承担，与原作者及项目维护者无关。原作者及项目维护者不对任何未授权测试、攻击行为或其他不当使用承担任何责任。

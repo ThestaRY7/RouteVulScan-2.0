@@ -60,7 +60,7 @@ public class vulscan {
                 LaunchPath(false, paths, rules, source, carryHeaders, bypassList);
             }
         } catch (Throwable t) {
-            burp.logError("执行扫描任务失败 [" + triggerSource + "]", t);
+            burp.logError(burp.t("log.scanFailed", triggerSource), t);
         } finally {
             burp.endScanSession();
         }
@@ -84,7 +84,7 @@ public class vulscan {
         try {
             requestUrl = new URL(requestResponse.request().url());
         } catch (Exception e) {
-            burp.logError("解析请求 URL 失败", e);
+            burp.logError(burp.t("log.parseUrlFailed"), e);
             return;
         }
         String baseUrl = requestUrl.getProtocol() + "://" + requestUrl.getHost() + ":" + requestUrl.getPort();
@@ -113,21 +113,23 @@ public class vulscan {
                     List<Future<Object>> futures = this.burp.ensureThreadPool().invokeAll(tasks, 31, TimeUnit.SECONDS);
                     for (Future<Object> future : futures) {
                         if (future.isCancelled()) {
-                            this.burp.logError("扫描超时: " + url + "/*");
+                            this.burp.logError(this.burp.t("log.scanTimeout", url));
                             this.burp.noteTimeout();
                             break;
                         }
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    this.burp.logError("扫描被中断: " + url + "/*");
+                    this.burp.logError(this.burp.t("log.scanInterrupted", url));
                     this.burp.noteTimeout();
                     return;
                 } finally {
-                    this.burp.notePathCompleted();
+                    if (!isCancelled()) {
+                        this.burp.notePathCompleted();
+                    }
                 }
             } else {
-                this.burp.logError("跳过重复路径: " + url + "/*");
+                this.burp.logError(this.burp.t("log.skipDuplicate", url));
                 this.burp.notePathSkipped();
             }
         }
