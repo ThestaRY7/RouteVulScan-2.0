@@ -6,8 +6,9 @@ RouteVulScan 是一个基于 Burp Suite Montoya API 开发的被动式路径漏�
 
 它的目标不是做大规模目录爆破，而是在你正常测试业务流量时，递归提取每一层路径，按规则发起少量、高价值探测请求，再通过状态码和正则表达式判断是否命中常见弱点，例如配置泄露、调试接口暴露、备份文件、历史遗留敏感资源等。
 ## 功能截图
-<img width="1462" height="902" alt="image" src="https://github.com/user-attachments/assets/5778668d-6406-4717-ae41-ae426205c4d7" />
-<img width="1460" height="902" alt="image" src="https://github.com/user-attachments/assets/171815b4-aa65-4558-b434-212b1434f01b" />
+<img width="1460" height="901" alt="image" src="https://github.com/user-attachments/assets/0541b262-956f-4be2-bc7d-63e01caf9e39" />
+<img width="1459" height="899" alt="image" src="https://github.com/user-attachments/assets/5967a91c-917d-4cf0-8d41-ef47ec40b189" />
+
 
 “代次” 指的是当前扫描会话的“版本号”或“取消代号”。
 
