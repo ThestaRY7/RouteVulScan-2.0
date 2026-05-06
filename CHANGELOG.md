@@ -1,6 +1,21 @@
 # Changelog
 
-## 2026-04-30
+## 2026-05-06 / v2.0.2
+
+### 修复
+
+- 修复右键 `发送到 RouteVulScan 并携带请求头` 未真实继承当前请求头的问题。
+- 修复右键选择 POST 请求并携带请求头时，扫描请求仍被从零构造为 GET，导致 Logger 中缺失原 POST 方法、请求体与请求头的问题。
+- 现在右键携带请求头扫描会以当前选中的请求作为模板，仅替换扫描路径，保留原始方法、body、Cookie、Authorization 与自定义 header。
+- 修复右键扫描在 Swing 事件线程同步执行导致 Burp UI 卡住的问题；扫描流程改为后台调度执行。
+- 修复被动扫描在 Burp HTTP 回调线程同步执行的问题，避免阻塞代理流量处理。
+
+### 构建
+
+- 版本更新为 `v2.0.2`。
+- Maven Shade 产物更新为 `target/RouteVulScan-V2.0.2.jar`。
+
+## 2026-04-30 / v2.0.1
 
 ### 修复
 
@@ -15,7 +30,7 @@
 - 新增 `src/main/resources/i18n/messages_zh_CN.properties` 与 `messages_en_US.properties`，集中维护中英文界面文案。
 - 调整 Maven Shade 产物命名，后续统一输出 `target/RouteVulScan-V<当前版本>.jar`，例如 `target/RouteVulScan-V2.0.1.jar`。
 
-## 2026-04-06
+## 2026-04-06 / v2.0.0
 
 ### 修复
 

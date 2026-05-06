@@ -29,16 +29,18 @@ public class vulscan {
     public String Path_record;
     public BurpExtender burp;
     private final int scanGeneration;
+    private final boolean forceCarryHeaders;
 
-    public vulscan(BurpExtender burp, HttpRequestResponse source, HttpRequest requestOverride, String triggerSource) {
+    public vulscan(BurpExtender burp, HttpRequestResponse source, HttpRequest requestOverride, String triggerSource, boolean forceCarryHeaders) {
         this.burp = burp;
         this.source = source;
         this.seedRequest = requestOverride != null ? requestOverride : source.request();
         this.scanGeneration = burp.getScanGeneration();
+        this.forceCarryHeaders = forceCarryHeaders;
         this.burp.beginScanSession();
         try {
             HttpRequest normalizedRequest = normalizeRequestForPathDiscovery(seedRequest);
-            List<HttpHeader> carryHeaders = new ArrayList<HttpHeader>(normalizedRequest.headers());
+            List<HttpHeader> carryHeaders = new ArrayList<HttpHeader>(seedRequest.headers());
             String[] paths = normalizedRequest.pathWithoutQuery().split("/");
             if (paths.length == 0) {
                 paths = new String[]{""};
@@ -151,6 +153,14 @@ public class vulscan {
 
     public HttpRequest seedRequest() {
         return seedRequest;
+    }
+
+    public boolean shouldCarryHeaders() {
+        return forceCarryHeaders || burp.Carry_head;
+    }
+
+    public boolean shouldUseSeedRequestTemplate() {
+        return forceCarryHeaders;
     }
 
     public static HashMap<String, String> AnalysisHeaders(List<HttpHeader> headers) {

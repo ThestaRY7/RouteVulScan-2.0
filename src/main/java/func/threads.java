@@ -61,20 +61,24 @@ public class threads implements Runnable {
             return;
         }
 
+        String scanPath;
         URL url;
         try {
-            URL seedUrl = new URL(source.request().url());
-            url = new URL(seedUrl.getProtocol(), seedUrl.getHost(), seedUrl.getPort(), String.valueOf(vul.Path_record) + urll);
+            URL seedUrl = new URL(vul.seedRequest().url());
+            scanPath = String.valueOf(vul.Path_record) + urll;
+            url = new URL(seedUrl.getProtocol(), seedUrl.getHost(), seedUrl.getPort(), scanPath);
         } catch (MalformedURLException e) {
             vul.burp.logError(vul.burp.t("log.buildScanUrlFailed"), e);
             return;
         }
 
-        HttpRequest request = HttpRequest.httpRequestFromUrl(url.toString());
-        if (vul.burp.Carry_head) {
+        HttpRequest request = vul.shouldUseSeedRequestTemplate()
+                ? vul.seedRequest().withPath(scanPath)
+                : HttpRequest.httpRequestFromUrl(url.toString());
+        if (!vul.shouldUseSeedRequestTemplate() && vul.shouldCarryHeaders()) {
             request = vul.burp.applyCarryHeaders(request, heads);
         }
-        if ("POST".equalsIgnoreCase(String.valueOf(zidian.get("method")))) {
+        if (!vul.shouldUseSeedRequestTemplate() && "POST".equalsIgnoreCase(String.valueOf(zidian.get("method")))) {
             request = request.withMethod("POST");
         }
 
