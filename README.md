@@ -2,9 +2,10 @@ README Version: [ENGLISH](README_EN.md)
 
 # RouteVulScan
 
-RouteVulScan 是一个基于 Burp Suite Montoya API 开发的被动式路径漏洞探测插件。
+A passive recursive path probing extension for Burp Suite, built on the Montoya API with YAML-based detection rules and low-noise vulnerability checks during normal web security testing.
 
-它的目标不是做大规模目录爆破，而是在你正常测试业务流量时，递归提取每一层路径，按规则发起少量、高价值探测请求，再通过状态码和正则表达式判断是否命中常见弱点，例如配置泄露、调试接口暴露、备份文件、历史遗留敏感资源等。
+RouteVulScan 是一个基于 Burp Suite Montoya API 开发的被动式路径递归探测插件。它会在正常测试业务流量时，自动提取并递归检查每一层路径，结合 YAML 规则进行低噪声、高价值的漏洞探测。
+
 ## 功能截图
 <img width="1460" height="901" alt="image" src="https://github.com/user-attachments/assets/0541b262-956f-4be2-bc7d-63e01caf9e39" />
 <img width="1459" height="899" alt="image" src="https://github.com/user-attachments/assets/5967a91c-917d-4cf0-8d41-ef47ec40b189" />
