@@ -2,25 +2,52 @@ package yaml;
 
 import burp.BurpExtender;
 import burp.I18n;
-import func.init_Yaml_thread;
+import func.RuleDownloadTask;
 import org.yaml.snakeyaml.Yaml;
 
 import javax.swing.*;
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class YamlUtil {
+    private static final AtomicBoolean RULE_DOWNLOAD_RUNNING = new AtomicBoolean(false);
+    private static final ExecutorService RULE_DOWNLOAD_EXECUTOR = Executors.newSingleThreadExecutor(new ThreadFactory() {
+        private final AtomicInteger index = new AtomicInteger(1);
+
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "RouteVulScan-rule-download-" + index.getAndIncrement());
+            thread.setDaemon(true);
+            return thread;
+        }
+    });
 
     public static Map<String, Object> defaultYamlData() {
         Map<String, Object> data = new HashMap<String, Object>();
         data.put("Load_List", new ArrayList<Map<String, Object>>());
-        data.put("Bypass_List", new ArrayList<String>());
         return data;
     }
 
     public static void init_Yaml(BurpExtender burp, JPanel one) {
-        new init_Yaml_thread(burp, one).start();
+        if (!RULE_DOWNLOAD_RUNNING.compareAndSet(false, true)) {
+            SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
+                    one,
+                    burp.t("rules.updateInProgress"),
+                    burp.t("dialog.info"),
+                    JOptionPane.INFORMATION_MESSAGE
+            ));
+            return;
+        }
+        RULE_DOWNLOAD_EXECUTOR.submit(new RuleDownloadTask(burp, one, RULE_DOWNLOAD_RUNNING));
+    }
 
+    public static void shutdownRuleDownloadExecutor() {
+        RULE_DOWNLOAD_EXECUTOR.shutdownNow();
     }
 
     public static Map<String, Object> readYaml(String file_path) {
@@ -34,13 +61,10 @@ public class YamlUtil {
             Yaml yaml = new Yaml();
             Object loaded = yaml.load(inputStream);
             if (loaded instanceof Map) {
-                data.putAll((Map<String, Object>) loaded);
+                data.put("Load_List", ((Map<String, Object>) loaded).get("Load_List"));
             }
             if (!(data.get("Load_List") instanceof List)) {
                 data.put("Load_List", new ArrayList<Map<String, Object>>());
-            }
-            if (!(data.get("Bypass_List") instanceof List)) {
-                data.put("Bypass_List", new ArrayList<String>());
             }
         } catch (Throwable e) {
             BurpExtender.logStaticError(I18n.t("log.readYamlFailed", file_path), e);
@@ -51,19 +75,14 @@ public class YamlUtil {
     public static void writeYaml(Map<String, Object> data, String filePath) {
         Yaml yaml = new Yaml();
         Map<String, Object> saveData = defaultYamlData();
-        if (data != null) {
-            saveData.putAll(data);
+        if (data != null && data.get("Load_List") instanceof List) {
+            saveData.put("Load_List", data.get("Load_List"));
         }
         if (!(saveData.get("Load_List") instanceof List)) {
             saveData.put("Load_List", new ArrayList<Map<String, Object>>());
         }
-        if (!(saveData.get("Bypass_List") instanceof List)) {
-            saveData.put("Bypass_List", new ArrayList<String>());
-        }
-        try {
-            PrintWriter writer = new PrintWriter(new File(filePath));
+        try (PrintWriter writer = new PrintWriter(new File(filePath))) {
             yaml.dump(saveData, writer);
-            writer.close();
         } catch (FileNotFoundException e) {
             BurpExtender.logStaticError(I18n.t("log.writeYamlFailed", filePath), e);
         }
@@ -80,7 +99,6 @@ public class YamlUtil {
         }
         Map<String, Object> save = (Map<String, Object>) new HashMap<String, Object>();
         save.put("Load_List", List2);
-        save.put("Bypass_List", Yaml_Map.get("Bypass_List"));
         YamlUtil.writeYaml(save, filePath);
     }
 
@@ -97,7 +115,6 @@ public class YamlUtil {
         }
         Map<String, Object> save = (Map<String, Object>) new HashMap<String, Object>();
         save.put("Load_List", List2);
-        save.put("Bypass_List", Yaml_Map.get("Bypass_List"));
         YamlUtil.writeYaml(save, filePath);
 
     }
@@ -115,7 +132,6 @@ public class YamlUtil {
             Map<String, Object> save = (Map<String, Object>) new HashMap<String, Object>();
             List1.add(add);
             save.put("Load_List", List1);
-            save.put("Bypass_List", Yaml_Map.get("Bypass_List"));
             YamlUtil.writeYaml(save, filePath);
         }
 
@@ -126,13 +142,10 @@ public class YamlUtil {
         Map<String, Object> data = defaultYamlData();
         Object loaded = yaml.load(str);
         if (loaded instanceof Map) {
-            data.putAll((Map<String, Object>) loaded);
+            data.put("Load_List", ((Map<String, Object>) loaded).get("Load_List"));
         }
         if (!(data.get("Load_List") instanceof List)) {
             data.put("Load_List", new ArrayList<Map<String, Object>>());
-        }
-        if (!(data.get("Bypass_List") instanceof List)) {
-            data.put("Bypass_List", new ArrayList<String>());
         }
         return data;
     }
@@ -156,21 +169,8 @@ public class YamlUtil {
                 YamlUtil.addYaml(i,BurpExtender.Yaml_Path);
             }
         }
-        List<String> oldBypassList = (List<String>)oldYaml.get("Bypass_List");
-        List<String> newBypassList = (List<String>)newYaml.get("Bypass_List");
-        if (oldBypassList == null){
-            oldBypassList = newBypassList;
-        }else {
-            for (String i : newBypassList){
-                if (!oldBypassList.contains(i)){
-                    oldBypassList.add(i);
-                }
-            }
-        }
-
         Map<String, Object> save = (Map<String, Object>) new HashMap<String, Object>();
         save.put("Load_List", (List<Map<String, Object>>) YamlUtil.readYaml(BurpExtender.Yaml_Path).get("Load_List"));
-        save.put("Bypass_List", oldBypassList);
         YamlUtil.writeYaml(save,BurpExtender.Yaml_Path);
 
 

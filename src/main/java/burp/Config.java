@@ -30,8 +30,6 @@ public class Config {
 
     private JButton scanningButton;
     private JButton headersButton;
-    private JButton domainButton;
-    private JButton bypassButton;
     private JCheckBox ruleEnabledCheck;
     private JLabel editorStateLabel;
 
@@ -102,22 +100,6 @@ public class Config {
             updateStatusLabel();
         });
 
-        domainButton = new JButton();
-        applyToggleState(domainButton, burp.DomainScan, "button.domainScan");
-        domainButton.addActionListener(e -> {
-            burp.DomainScan = !burp.DomainScan;
-            applyToggleState(domainButton, burp.DomainScan, "button.domainScan");
-            updateStatusLabel();
-        });
-
-        bypassButton = new JButton();
-        applyToggleState(bypassButton, burp.Bypass, "button.bypassScan");
-        bypassButton.addActionListener(e -> {
-            burp.Bypass = !burp.Bypass;
-            applyToggleState(bypassButton, burp.Bypass, "button.bypassScan");
-            updateStatusLabel();
-        });
-
         SpinnerNumberModel model = new SpinnerNumberModel(10, 1, 500, 1);
         spinner1 = new JSpinner(model);
         ((JSpinner.DefaultEditor) spinner1.getEditor()).getTextField().setColumns(4);
@@ -144,8 +126,6 @@ public class Config {
 
         controls.add(scanningButton);
         controls.add(headersButton);
-        controls.add(domainButton);
-        controls.add(bypassButton);
         controls.add(localizedLabel("label.threads"));
         controls.add(spinner1);
         controls.add(localizedLabel("label.hostFilter"));
@@ -170,9 +150,9 @@ public class Config {
         txtfield1.setEditable(false);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        JButton updateButton = localizedButton("button.updateRules");
+        JButton updateButton = localizedButton("button.cloudDownloadRules");
         updateButton.addActionListener(e -> YamlUtil.init_Yaml(burp, one));
-        JButton reloadButton = localizedButton("button.reloadRules");
+        JButton reloadButton = localizedButton("button.localReloadRules");
         reloadButton.addActionListener(e -> reloadRulesAndRestoreSelection(getCurrentGroupName(), editingRuleId));
         buttons.add(updateButton);
         buttons.add(reloadButton);
@@ -357,8 +337,6 @@ public class Config {
                         + (burp.on_off ? t("label.passiveOn") : t("label.passiveOff"))
                         + " | " + t("label.threads") + " " + burp.getConfiguredThreadCount()
                         + " | " + t("label.headers") + " " + (burp.Carry_head ? t("state.on") : t("state.off"))
-                        + " | " + t("label.domainScan") + " " + (burp.DomainScan ? t("state.on") : t("state.off"))
-                        + " | " + t("label.bypassScan") + " " + (burp.Bypass ? t("state.on") : t("state.off"))
                         + " | " + t("label.filter") + " " + hostFilterField.getText().trim()
         );
     }
@@ -401,8 +379,6 @@ public class Config {
                 refreshComponentText(one);
                 applyToggleState(scanningButton, burp.on_off, "button.passiveScan");
                 applyToggleState(headersButton, burp.Carry_head, "button.carryHeaders");
-                applyToggleState(domainButton, burp.DomainScan, "button.domainScan");
-                applyToggleState(bypassButton, burp.Bypass, "button.bypassScan");
                 populateLanguageBox();
                 updateStatusLabel();
                 refreshProgressView();
