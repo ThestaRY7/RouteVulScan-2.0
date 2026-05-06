@@ -2,9 +2,10 @@ README Version: [中文](README.md)
 
 # RouteVulScan
 
-RouteVulScan is a passive path vulnerability detection extension developed with the Burp Suite Montoya API.
+A passive recursive path probing extension for Burp Suite, built on the Montoya API with YAML-based detection rules and low-noise vulnerability checks during normal web security testing.
 
-Its goal is not large-scale directory brute forcing. Instead, while you test normal business traffic, it recursively extracts each path level, sends a small number of high-value probing requests according to rules, and determines matches through status codes and regular expressions. It can help identify common weaknesses such as configuration leaks, exposed debug interfaces, backup files, and legacy sensitive resources.
+RouteVulScan is designed for passive, low-noise path discovery and vulnerability detection. Instead of brute-forcing large wordlists, it observes normal traffic, recursively extracts path levels, and probes high-value locations based on configurable YAML rules.
+
 
 ## Screenshots
 
