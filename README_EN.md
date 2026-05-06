@@ -8,8 +8,10 @@ Its goal is not large-scale directory brute forcing. Instead, while you test nor
 
 ## Screenshots
 
-<img width="1460" height="900" alt="image" src="https://github.com/user-attachments/assets/91f2c09b-bfd8-4c4b-a7c1-eeac29f196a0" />
-<img width="1458" height="878" alt="image" src="https://github.com/user-attachments/assets/fcd82360-d563-4e7a-b1c7-754c8c13ca57" />
+<img width="2902" height="1786" alt="image" src="https://github.com/user-attachments/assets/6fc600d3-470d-48d9-98fa-14b707a888b6" />
+<img width="2896" height="1782" alt="image" src="https://github.com/user-attachments/assets/7e556268-b174-496e-8414-06720cbcfc75" />
+
+
 
 "Generation" refers to the current scan session's version number or cancellation marker.
 
