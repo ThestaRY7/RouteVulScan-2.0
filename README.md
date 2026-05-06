@@ -1,13 +1,11 @@
-README Version: [English](README_EN.md)
-
 # RouteVulScan
 
 RouteVulScan 是一个基于 Burp Suite Montoya API 开发的被动式路径漏洞探测插件。
 
 它的目标不是做大规模目录爆破，而是在你正常测试业务流量时，递归提取每一层路径，按规则发起少量、高价值探测请求，再通过状态码和正则表达式判断是否命中常见弱点，例如配置泄露、调试接口暴露、备份文件、历史遗留敏感资源等。
 ## 功能截图
-<img width="1460" height="900" alt="image" src="https://github.com/user-attachments/assets/91f2c09b-bfd8-4c4b-a7c1-eeac29f196a0" />
-<img width="1458" height="878" alt="image" src="https://github.com/user-attachments/assets/fcd82360-d563-4e7a-b1c7-754c8c13ca57" />
+<img width="1462" height="902" alt="image" src="https://github.com/user-attachments/assets/5778668d-6406-4717-ae41-ae426205c4d7" />
+<img width="1460" height="902" alt="image" src="https://github.com/user-attachments/assets/171815b4-aa65-4558-b434-212b1434f01b" />
 
 “代次” 指的是当前扫描会话的“版本号”或“取消代号”。
 
@@ -33,7 +31,7 @@ RouteVulScan 是一个基于 Burp Suite Montoya API 开发的被动式路径漏�
 - 递归探测每一层路径，例如访问 `/a/b/c` 时，可继续检查 `/`、`/a/`、`/a/b/`、`/a/b/c/`。
 - 按 YAML 规则库匹配状态码、关键字和自定义正则，快速发现“量不大但很容易漏掉”的问题。
 - 支持右键把请求发送到插件做主动补扫，适合聚焦单站点做深入排查。
-- 支持规则分组、启停控制、请求头继承、域名扫描、绕过扫描、结果过滤和历史查看。
+- 支持规则分组、启停控制、请求头继承、云端下载规则、本地重载规则、结果过滤和历史查看。
 
 ## 适用场景
 
@@ -45,9 +43,9 @@ RouteVulScan 是一个基于 Burp Suite Montoya API 开发的被动式路径漏�
 
 - 被动扫描：流量经过 Burp 时自动触发扫描。
 - 主动扫描：右键选中请求，发送到 RouteVulScan。
-- 规则引擎：规则存储在 `Config_yaml.yaml`，支持分类、启用状态、正则和状态码范围。
+- 规则引擎：规则存储在 `Rules.yaml`，支持分类、启用状态、正则和状态码范围。
 - 请求模板变量：规则中可以引用原始请求/响应中的字段。
-- 扫描控制：支持线程数、主机过滤、携带请求头、域名扫描、绕过扫描。
+- 扫描控制：支持线程数、主机过滤和携带请求头。
 - 结果面板：展示命中结果、请求包、响应包，并支持过滤相同响应长度的重复项。
 
 ## 技术选型
@@ -72,7 +70,7 @@ mvn clean package
 构建完成后，产物位于：
 
 ```bash
-target/RouteVulScan-burp.jar
+target/RouteVulScan-V2.0.2.jar
 ```
 
 ## 安装方式
@@ -83,20 +81,20 @@ target/RouteVulScan-burp.jar
 Extender -> Extensions -> Add
 ```
 
-选择 `target/RouteVulScan-burp.jar` 即可加载。
+选择 `target/RouteVulScan-V2.0.2.jar` 即可加载。
 
 ## 使用说明
 
 1. 在 Burp 中加载插件。
-2. 插件首次启动后会在当前运行目录生成或使用 `Config_yaml.yaml`。
-3. 在配置页开启你需要的开关，例如被动扫描、携带请求头、域名扫描。
+2. 插件首次启动后会在当前运行目录生成或使用 `Rules.yaml`。
+3. 在配置页开启你需要的开关，例如被动扫描、携带请求头。
 4. 正常测试目标站点，插件会自动递归检查各层路径。
 5. 在结果页查看命中记录，并联动查看请求和响应。
 6. 如需针对某个站点补扫，可右键请求发送到 RouteVulScan。
 
 ## 规则说明
 
-规则文件为 `Config_yaml.yaml`，每条规则可定义：
+规则文件为 `Rules.yaml`，每条规则可定义：
 
 - `type`：规则组
 - `loaded`：是否启用
