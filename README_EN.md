@@ -74,7 +74,7 @@ mvn clean package
 After the build completes, the artifact is located at:
 
 ```bash
-target/RouteVulScan-V2.0.1.jar
+target/RouteVulScan-V2.0.2.jar
 ```
 
 ## Installation
@@ -85,7 +85,7 @@ Open the following in Burp Suite:
 Extender -> Extensions -> Add
 ```
 
-Select `target/RouteVulScan-V2.0.1.jar` to load the extension.
+Select `target/RouteVulScan-V2.0.2.jar` to load the extension.
 
 ## Usage
 

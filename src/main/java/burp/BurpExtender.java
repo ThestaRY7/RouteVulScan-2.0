@@ -46,7 +46,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
 
     public static String Yaml_Path = System.getProperty("user.dir") + "/" + "Config_yaml.yaml";
     public static String EXPAND_NAME = "Route Vulnerable Scan";
-    public static String VERSION = "2.0.1";
+    public static String VERSION = "2.0.2";
     private static final String LANGUAGE_PREFERENCE_KEY = "routevulscan.language";
     public static String Download_Yaml_protocol = "https";
     public static String Download_Yaml_host = "raw.githubusercontent.com";
@@ -60,6 +60,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
     public Tags tags;
     public Config Config_l;
     public ExecutorService ThreadPool;
+    private ExecutorService scanExecutor;
     public boolean Carry_head = false;
     public boolean on_off = false;
     public boolean Bypass = false;
@@ -92,6 +93,9 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
                 if (ThreadPool != null && !ThreadPool.isShutdown()) {
                     ThreadPool.shutdownNow();
                 }
+                if (scanExecutor != null && !scanExecutor.isShutdown()) {
+                    scanExecutor.shutdownNow();
+                }
             }
         });
 
@@ -100,6 +104,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
             this.Config_l = new Config(this);
             this.tags = new Tags(this, Config_l);
             this.ThreadPool = Executors.newFixedThreadPool(getConfiguredThreadCount());
+            this.scanExecutor = newScanExecutor();
             Component suiteTab = tags.getUiComponent();
             if (suiteTab == null) {
                 throw new IllegalStateException("RouteVulScan UI root component was not created");
@@ -163,6 +168,38 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
         return this.ThreadPool;
     }
 
+    private ExecutorService newScanExecutor() {
+        return Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "RouteVulScan-scan-dispatcher");
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    private synchronized ExecutorService ensureScanExecutor() {
+        if (this.scanExecutor == null || this.scanExecutor.isShutdown() || this.scanExecutor.isTerminated()) {
+            this.scanExecutor = newScanExecutor();
+        }
+        return this.scanExecutor;
+    }
+
+    private synchronized void resetScanExecutor() {
+        if (this.scanExecutor != null && !this.scanExecutor.isShutdown()) {
+            this.scanExecutor.shutdownNow();
+        }
+        this.scanExecutor = newScanExecutor();
+    }
+
+    private void submitScan(HttpRequestResponse requestResponse, HttpRequest requestOverride, String triggerSource, boolean forceCarryHeaders) {
+        ensureScanExecutor().execute(() -> {
+            try {
+                new vulscan(this, requestResponse, requestOverride, triggerSource, forceCarryHeaders);
+            } catch (Throwable t) {
+                logError(t("log.scanFailed", triggerSource), t);
+            }
+        });
+    }
+
     public synchronized void resetThreadPool() {
         if (this.ThreadPool != null && !this.ThreadPool.isShutdown()) {
             this.ThreadPool.shutdownNow();
@@ -222,6 +259,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
 
     public void cancelActiveScans() {
         scanGeneration.incrementAndGet();
+        resetScanExecutor();
         resetThreadPool();
         notifyProgressChanged();
     }
@@ -394,7 +432,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
                 logError(t("log.domainRecordFailed", rootUrl), t);
             }
             ensureThreadPool();
-            new vulscan(this, requestResponse, null, source);
+            submitScan(requestResponse, null, source, false);
         } catch (Throwable t) {
             logError(t("log.passiveTriggerFailed", source), t);
         }
@@ -438,7 +476,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
         }
         if (!customHeaders) {
             for (HttpRequestResponse requestResponse : selected) {
-                new vulscan(this, requestResponse, null, t("menu.send"));
+                submitScan(requestResponse, null, t("menu.send"), false);
             }
             return;
         }
@@ -474,7 +512,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
         for (HttpRequestResponse requestResponse : selected) {
             try {
                 HttpRequest request = applyCustomHeaders(requestResponse.request(), lines);
-                new vulscan(this, requestResponse, request, t("menu.send"));
+                submitScan(requestResponse, request, t("menu.sendWithHeaders"), true);
             } catch (Throwable t) {
                 logError(this.t("log.applyHeadersFailed"), t);
             }
