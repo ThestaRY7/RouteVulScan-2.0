@@ -16,7 +16,7 @@ RouteVulScan is designed for passive, low-noise path discovery and vulnerability
 
 "Generation" refers to the current scan session's version number or cancellation marker.
 
-In this extension, every click on "Cancel running scans" increments the internal `scanGeneration` by 1. The relevant code is in `BurpExtender.java` (line 165). The "Generation" value shown in the progress panel comes from the same counter; see `Config.java` (line 332).
+In this extension, every click on "Cancel running scans" increments the internal `scanGeneration` by 1. The "Generation" value shown in the progress panel comes from the same counter.
 
 Its meaning is simple:
 
@@ -55,13 +55,6 @@ This repository is a second-maintained version of the original project with comp
 - Scan controls: supports thread count, host filtering, and carrying request headers.
 - Results panel: displays matched results, request packets, response packets, and supports filtering duplicate items with the same response length.
 
-## Technical Choices
-
-- Current-version first: uses Burp's official mainstream **Montoya API**.
-- Official-recommendation first: uses **Swing + Montoya UI components** to build the extension interface.
-- Production-ready target: uses **Maven + Shade Plugin** to package a fat jar that can be imported directly into Burp.
-- Reason for dropping old approaches: no longer uses the legacy `IBurpExtender` / `ITab`, and no longer maintains the historical Gradle build chain.
-
 ## Requirements
 
 - Burp Suite 2023.12.1 or later
@@ -77,7 +70,7 @@ mvn clean package
 After the build completes, the artifact is located at:
 
 ```bash
-target/RouteVulScan-V2.0.2.jar
+target/RouteVulScan-V2.0.3.jar
 ```
 
 ## Installation
@@ -88,7 +81,7 @@ Open the following in Burp Suite:
 Extender -> Extensions -> Add
 ```
 
-Select `target/RouteVulScan-V2.0.2.jar` to load the extension.
+Select `target/RouteVulScan-V2.0.3.jar` to load the extension.
 
 ## Usage
 
@@ -111,23 +104,6 @@ The rule file is `Rules.yaml`. Each rule can define:
 - `re`: matching regular expression
 - `info`: match description
 - `state`: status code; supports a single value, comma-separated values, or ranges
-
-### Template Variables
-
-Rules support referencing information from the current request or response:
-
-```text
-{{request.head.cookie}}
-{{request.head.host.main}}
-{{request.head.host.name}}
-{{request.method}}
-{{request.path}}
-{{request.url}}
-{{request.protocol}}
-{{request.port}}
-{{response.head.server}}
-{{response.status}}
-```
 
 ## Acknowledgements
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-05-15 / v2.0.3
+
+### 修复
+
+- 修复 Burp 右键扩展菜单显示为 `Route Vulnerable Scan 2.0.0` 的问题，扩展名统一调整为 `RouteVulScan`。
+- 修复右键 `发送到 RouteVulScan 并携带请求头` 行为不符合预期的问题；现在该入口会直接使用当前选中的请求作为扫描模板，不再弹出自定义请求头编辑窗口。
+- 修复携带请求头扫描时重新构造请求导致原始业务 header 丢失的问题；现在扫描请求仅替换 URL path，保留原请求中的 `Host`、`Content-Type`、`Content-Length`、认证 header、自定义 header 与其他 request headers。
+- 保持规则方法逻辑不变：GET 规则仍发送 GET 请求，POST 规则仍发送 POST 请求，同时复用原始请求头上下文。
+
 ## 2026-05-06 / v2.0.2
 
 ### 修复
@@ -26,12 +35,6 @@
 - `重新加载规则` 按钮重命名为 `本地重载规则`，英文文案为 `Local Reload Rules`。
 - `云端下载规则` 现在从 `https://raw.githubusercontent.com/ThestaRY7/RouteVulScan-2.0/main/Rules.yaml` 下载规则，并校验 HTTP 状态码与规则内容有效性。
 - 扫描调度与规则请求执行分离：新增独立扫描协调线程，规则请求继续使用可配置工作线程池，避免协调任务与规则任务互相阻塞。
-
-### 构建
-
-- 版本更新为 `v2.0.2`。
-- Maven Shade 产物更新为 `target/RouteVulScan-V2.0.2.jar`。
-- SnakeYAML 依赖升级至 `2.6`。
 
 ## 2026-04-30 / v2.0.1
 
@@ -71,10 +74,3 @@
 - 删除 macOS 垃圾文件：`.DS_Store`。
 - 删除历史 Gradle 构建文件 `build.gradle`，统一只保留 Maven 构建入口。
 - 删除不再使用的 `lib/rt.jar` 历史遗留依赖目录。
-
-### 文档
-
-- 重写 `README.md`，补充插件用途、功能、安装方法、构建方法和规则说明。
-- 新增本更新日志文档，便于后续发布到 GitHub 时追踪版本变化。
-- 新增 `RELEASE_NOTES.md`，用于 GitHub Release 发布说明。
-- 新增 `LICENSE` 来源与授权说明文件，并标注原版仓库地址：`https://github.com/F6JO/RouteVulScan`。

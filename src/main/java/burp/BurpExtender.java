@@ -43,8 +43,8 @@ import java.util.regex.Pattern;
 public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItemsProvider {
 
     public static String Yaml_Path = System.getProperty("user.dir") + "/" + "Rules.yaml";
-    public static String EXPAND_NAME = "Route Vulnerable Scan";
-    public static String VERSION = "2.0.2";
+    public static String EXPAND_NAME = "RouteVulScan";
+    public static String VERSION = "2.0.3";
     private static final String LANGUAGE_PREFERENCE_KEY = "routevulscan.language";
     public static String Download_Yaml_protocol = "https";
     public static String Download_Yaml_host = "raw.githubusercontent.com";
@@ -81,7 +81,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
         this.logging = api.logging();
         staticLogging = this.logging;
         I18n.setLanguage(loadLanguagePreference());
-        api.extension().setName(EXPAND_NAME + " " + VERSION);
+        api.extension().setName(EXPAND_NAME);
         api.extension().registerUnloadingHandler(new ExtensionUnloadingHandler() {
             @Override
             public void extensionUnloaded() {
@@ -192,12 +192,16 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
     }
 
     public void submitScan(HttpRequestResponse requestResponse, HttpRequest requestOverride, String triggerSource) {
+        submitScan(requestResponse, requestOverride, triggerSource, false);
+    }
+
+    public void submitScan(HttpRequestResponse requestResponse, HttpRequest requestOverride, String triggerSource, boolean forceCarryHeaders) {
         int queuedGeneration = getScanGeneration();
         ensureScanCoordinatorPool().submit(() -> {
             if (queuedGeneration != getScanGeneration()) {
                 return;
             }
-            new vulscan(this, requestResponse, requestOverride, triggerSource);
+            new vulscan(this, requestResponse, requestOverride, triggerSource, forceCarryHeaders);
         });
     }
 
@@ -455,18 +459,18 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
         return selected;
     }
 
-    public void startManualScan(List<HttpRequestResponse> selected, boolean customHeaders) {
+    public void startManualScan(List<HttpRequestResponse> selected, boolean carryHeaders) {
         if (selected == null || selected.isEmpty()) {
             logError(t("log.manualNoSelection"));
             return;
         }
-        if (!customHeaders) {
-            for (HttpRequestResponse requestResponse : selected) {
+        for (HttpRequestResponse requestResponse : selected) {
+            if (carryHeaders) {
+                submitScan(requestResponse, requestResponse.request(), t("menu.sendWithHeaders"), true);
+            } else {
                 submitScan(requestResponse, null, t("menu.send"));
             }
-            return;
         }
-        showHeaderDialog(selected);
     }
 
     private void showHeaderDialog(List<HttpRequestResponse> selected) {

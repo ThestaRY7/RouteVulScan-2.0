@@ -21,19 +21,24 @@ public class vulscan {
 
     private final HttpRequestResponse source;
     private final HttpRequest seedRequest;
+    private final boolean forceCarryHeaders;
     public String Path_record;
     public BurpExtender burp;
     private final int scanGeneration;
 
     public vulscan(BurpExtender burp, HttpRequestResponse source, HttpRequest requestOverride, String triggerSource) {
+        this(burp, source, requestOverride, triggerSource, false);
+    }
+
+    public vulscan(BurpExtender burp, HttpRequestResponse source, HttpRequest requestOverride, String triggerSource, boolean forceCarryHeaders) {
         this.burp = burp;
         this.source = source;
         this.seedRequest = requestOverride != null ? requestOverride : source.request();
+        this.forceCarryHeaders = forceCarryHeaders;
         this.scanGeneration = burp.getScanGeneration();
         this.burp.beginScanSession();
         try {
             HttpRequest normalizedRequest = normalizeRequestForPathDiscovery(seedRequest);
-            List<HttpHeader> carryHeaders = new ArrayList<HttpHeader>(normalizedRequest.headers());
             String[] paths = normalizedRequest.pathWithoutQuery().split("/");
             if (paths.length == 0) {
                 paths = new String[]{""};
@@ -42,7 +47,7 @@ public class vulscan {
             Map<String, Object> yamlMap = YamlUtil.readYaml(burp.Config_l.yaml_path);
             List<Map<String, Object>> rules = (List<Map<String, Object>>) yamlMap.get("Load_List");
 
-            LaunchPath(paths, rules, source, carryHeaders);
+            LaunchPath(paths, rules, source);
         } catch (Throwable t) {
             burp.logError(burp.t("log.scanFailed", triggerSource), t);
         } finally {
@@ -62,7 +67,7 @@ public class vulscan {
         return normalized;
     }
 
-    private void LaunchPath(String[] paths, List<Map<String, Object>> rules, HttpRequestResponse requestResponse, List<HttpHeader> carryHeaders) {
+    private void LaunchPath(String[] paths, List<Map<String, Object>> rules, HttpRequestResponse requestResponse) {
         this.Path_record = "";
         URL requestUrl;
         try {
@@ -88,7 +93,7 @@ public class vulscan {
                 this.burp.notePathQueued();
                 List<Callable<Object>> tasks = new ArrayList<Callable<Object>>();
                 for (Map<String, Object> rule : rules) {
-                    tasks.add(java.util.concurrent.Executors.callable(new threads(rule, this, requestResponse, carryHeaders)));
+                    tasks.add(java.util.concurrent.Executors.callable(new threads(rule, this, requestResponse)));
                 }
                 try {
                     List<Future<Object>> futures = this.burp.ensureThreadPool().invokeAll(tasks, 31, TimeUnit.SECONDS);
@@ -132,6 +137,10 @@ public class vulscan {
 
     public HttpRequest seedRequest() {
         return seedRequest;
+    }
+
+    public boolean shouldCarryHeaders() {
+        return this.forceCarryHeaders || this.burp.Carry_head;
     }
 
     public static HashMap<String, String> AnalysisHeaders(List<HttpHeader> headers) {

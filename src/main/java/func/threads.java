@@ -7,7 +7,6 @@ import burp.api.montoya.http.message.requests.HttpRequest;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -16,13 +15,11 @@ public class threads implements Runnable {
     private final Map<String, Object> zidian;
     private final vulscan vul;
     private final HttpRequestResponse newHttpRequestResponse;
-    private final List<burp.api.montoya.http.message.HttpHeader> heads;
 
-    public threads(Map<String, Object> zidian, vulscan vul, HttpRequestResponse newHttpRequestResponse, List<burp.api.montoya.http.message.HttpHeader> heads) {
+    public threads(Map<String, Object> zidian, vulscan vul, HttpRequestResponse newHttpRequestResponse) {
         this.zidian = zidian;
         this.vul = vul;
         this.newHttpRequestResponse = newHttpRequestResponse;
-        this.heads = heads;
     }
 
     @Override
@@ -34,7 +31,7 @@ public class threads implements Runnable {
         try {
             vul.burp.noteTaskStarted();
             counted = true;
-            go(this.zidian, this.vul, this.newHttpRequestResponse, this.heads);
+            go(this.zidian, this.vul, this.newHttpRequestResponse);
         } finally {
             if (counted && !vul.isCancelled()) {
                 vul.burp.noteTaskFinished();
@@ -42,7 +39,7 @@ public class threads implements Runnable {
         }
     }
 
-    private static void go(Map<String, Object> zidian, vulscan vul, HttpRequestResponse source, List<burp.api.montoya.http.message.HttpHeader> heads) {
+    private static void go(Map<String, Object> zidian, vulscan vul, HttpRequestResponse source) {
         if (vul.isCancelled()) {
             return;
         }
@@ -67,13 +64,8 @@ public class threads implements Runnable {
             return;
         }
 
-        HttpRequest request = HttpRequest.httpRequestFromUrl(url.toString());
-        if (vul.burp.Carry_head) {
-            request = vul.burp.applyCarryHeaders(request, heads);
-        }
-        if ("POST".equalsIgnoreCase(String.valueOf(zidian.get("method")))) {
-            request = request.withMethod("POST");
-        }
+        String ruleMethod = String.valueOf(zidian.get("method"));
+        HttpRequest request = buildScanRequest(vul, url, ruleMethod);
 
         HttpRequestResponse response = vul.burp.api.http().sendRequest(request);
         if (response == null || !response.hasResponse()) {
@@ -81,6 +73,21 @@ public class threads implements Runnable {
         }
 
         matchResponse(vul, name, info, re, states, response);
+    }
+
+    private static HttpRequest buildScanRequest(vulscan vul, URL url, String ruleMethod) {
+        HttpRequest request;
+        if (vul.shouldCarryHeaders()) {
+            // 携带请求头时以原始请求为模板，仅替换扫描路径，避免丢失 Cookie、认证头和业务自定义头。
+            request = vul.seedRequest().withPath(url.getFile());
+        } else {
+            request = HttpRequest.httpRequestFromUrl(url.toString());
+        }
+
+        if ("POST".equalsIgnoreCase(ruleMethod)) {
+            return request.withMethod("POST");
+        }
+        return request.withMethod("GET");
     }
 
     private static boolean matchResponse(vulscan vul, String name, String info, String re, Collection<Integer> states, HttpRequestResponse response) {

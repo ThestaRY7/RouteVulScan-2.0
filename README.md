@@ -13,7 +13,7 @@ RouteVulScan 是一个基于 Burp Suite Montoya API 开发的被动式路径递�
 
 “代次” 指的是当前扫描会话的“版本号”或“取消代号”。
 
-在这个插件里，每次点击“取消运行中扫描”都会把内部的 scanGeneration 加 1，代码在 BurpExtender.java (line 165)。进度面板显示的“代次”来自同一个计数器，见 Config.java (line 332)。
+在这个插件里，每次点击“取消运行中扫描”都会把内部的 scanGeneration 加 1，进度面板显示的“代次”来自同一个计数器。
 含义很简单：
 
 - 代次 0：初始状态，还没执行过“取消运行中扫描”
@@ -52,13 +52,6 @@ RouteVulScan 是一个基于 Burp Suite Montoya API 开发的被动式路径递�
 - 扫描控制：支持线程数、主机过滤和携带请求头。
 - 结果面板：展示命中结果、请求包、响应包，并支持过滤相同响应长度的重复项。
 
-## 技术选型
-
-- 当前版本优先：使用 Burp 官方主线 **Montoya API**。
-- 官方推荐优先：使用 **Swing + Montoya UI 组件** 构建插件界面。
-- 生产可运行为目标：使用 **Maven + Shade Plugin** 打包生成可直接导入 Burp 的 fat jar。
-- 放弃旧方案原因：不再使用旧版 `IBurpExtender` / `ITab`，也不再维护历史 Gradle 构建链路。
-
 ## 环境要求
 
 - Burp Suite 2023.12.1及以上
@@ -74,7 +67,7 @@ mvn clean package
 构建完成后，产物位于：
 
 ```bash
-target/RouteVulScan-V2.0.2.jar
+target/RouteVulScan-V2.0.3.jar
 ```
 
 ## 安装方式
@@ -85,7 +78,7 @@ target/RouteVulScan-V2.0.2.jar
 Extender -> Extensions -> Add
 ```
 
-选择 `target/RouteVulScan-V2.0.2.jar` 即可加载。
+选择 `target/RouteVulScan-V2.0.3.jar` 即可加载。
 
 ## 使用说明
 
@@ -108,23 +101,6 @@ Extender -> Extensions -> Add
 - `re`：匹配正则
 - `info`：命中说明
 - `state`：状态码，可写单值、逗号分隔、区间范围
-
-### 模板变量
-
-规则中支持引用当前请求或响应的信息：
-
-```text
-{{request.head.cookie}}
-{{request.head.host.main}}
-{{request.head.host.name}}
-{{request.method}}
-{{request.path}}
-{{request.url}}
-{{request.protocol}}
-{{request.port}}
-{{response.head.server}}
-{{response.status}}
-```
 
 ## 致谢
 
