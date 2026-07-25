@@ -121,9 +121,20 @@ public class vulscan {
         }
     }
 
-    public static void ir_add(Tags tags, String name, String method, String url, String state, String info, String length, HttpRequestResponse messageInfo) {
+    public static void ir_add(
+            Tags tags,
+            String name,
+            String method,
+            String url,
+            String state,
+            String info,
+            String length,
+            HttpRequestResponse messageInfo,
+            long startTimeMillis,
+            long endTimeMillis
+    ) {
         synchronized (tags) {
-            tags.addLogEntry(name, method, url, state, info, length, messageInfo);
+            tags.addLogEntry(name, method, url, state, info, length, messageInfo, startTimeMillis, endTimeMillis);
         }
     }
 

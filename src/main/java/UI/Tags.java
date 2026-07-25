@@ -21,13 +21,14 @@ import java.awt.event.MouseEvent;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class Tags extends AbstractTableModel {
     public final BurpExtender burp;
@@ -54,8 +55,8 @@ public class Tags extends AbstractTableModel {
     public HttpRequestEditor HRequestTextEditor;
     public HttpResponseEditor HResponseTextEditor;
     private HttpRequestResponse currentlyDisplayedItem;
-    private List<LogEntry> logEntries = new ArrayList<LogEntry>();
-    private Map<String, Map<Integer, Integer>> hostSizeCountMap = new HashMap<String, Map<Integer, Integer>>();
+    private final List<LogEntry> logEntries = new ArrayList<LogEntry>();
+    private int nextEntryId;
 
     public Tags(BurpExtender burp, Config config) {
         this.burp = burp;
@@ -177,91 +178,209 @@ public class Tags extends AbstractTableModel {
     }
 
     public void addLogEntry(String name, String method, String url, String state, String info, String length, HttpRequestResponse requestResponse) {
-        String host = extractHost(url);
-        LogEntry entry = new LogEntry(name, method, url, state, info, length, requestResponse, host);
+        long now = System.currentTimeMillis();
+        addLogEntry(name, method, url, state, info, length, requestResponse, now, now);
+    }
+
+    /**
+     * 保存一条完整结果。时间在首次写入时固化，后续过滤或刷新只重建视图，不重新生成业务数据。
+     */
+    public void addLogEntry(
+            String name,
+            String method,
+            String url,
+            String state,
+            String info,
+            String length,
+            HttpRequestResponse requestResponse,
+            long startTimeMillis,
+            long endTimeMillis
+    ) {
+        LogEntry entry;
         synchronized (logEntries) {
+            entry = new LogEntry(
+                    nextEntryId++,
+                    name,
+                    method,
+                    url,
+                    state,
+                    info,
+                    length,
+                    requestResponse,
+                    extractHost(url, requestResponse),
+                    formatTime(startTimeMillis),
+                    formatTime(endTimeMillis)
+            );
             logEntries.add(entry);
-            updateHostSizeCount(host, Integer.parseInt(length));
         }
 
         SwingUtilities.invokeLater(() -> {
             if (enableFilterCheckBox == null || statusLabel == null) {
                 return;
             }
-            if (!enableFilterCheckBox.isSelected() || shouldShowEntry(entry)) {
-                add(name, method, url, state, info, length, requestResponse);
+            // 清除或删除可能先于该 EDT 回调执行，不能让已经删除的结果重新出现在表格中。
+            if (!containsLogEntry(entry.id)) {
+                return;
             }
-            updateStatusLabel();
+            if (enableFilterCheckBox.isSelected()) {
+                refreshTableOnEdt();
+            } else if (findDisplayedRowById(entry.id) < 0) {
+                int row = Udatas.size();
+                Udatas.add(new TablesData(entry));
+                fireTableRowsInserted(row, row);
+                updateStatusLabel();
+            }
         });
     }
 
-    private String extractHost(String url) {
+    /** 将毫秒时间戳转换为结果表使用的本地时间文本。 */
+    private String formatTime(long timeMillis) {
+        if (timeMillis <= 0) {
+            return "";
+        }
+        return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(timeMillis));
+    }
+
+    /**
+     * URL 异常时回退到 Montoya 的 HttpService，避免脏数据把所有结果错误归入同一主机。
+     */
+    private String extractHost(String url, HttpRequestResponse requestResponse) {
         try {
-            return new URL(url).getHost();
-        } catch (Exception e) {
-            return t("status.unknown");
+            String host = new URL(url).getHost();
+            if (host != null && !host.trim().isEmpty()) {
+                return host;
+            }
+        } catch (Exception ignored) {
+            // 继续使用请求对象中的服务信息兜底。
+        }
+        try {
+            if (requestResponse != null && requestResponse.httpService() != null) {
+                String host = requestResponse.httpService().host();
+                if (host != null && !host.trim().isEmpty()) {
+                    return host;
+                }
+            }
+        } catch (Throwable ignored) {
+            // 第三方请求对象实现异常时仍允许结果进入列表。
+        }
+        return "<unknown>";
+    }
+
+    /** 检查异步 UI 回调对应的历史记录是否仍然存在。 */
+    private boolean containsLogEntry(int entryId) {
+        synchronized (logEntries) {
+            for (LogEntry entry : logEntries) {
+                if (entry.id == entryId) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** 获取历史记录快照，避免在持锁期间操作 Swing 模型。 */
+    private List<LogEntry> snapshotLogEntries() {
+        synchronized (logEntries) {
+            return new ArrayList<LogEntry>(logEntries);
         }
     }
 
-    private void updateHostSizeCount(String host, int size) {
-        synchronized (hostSizeCountMap) {
-            if (!hostSizeCountMap.containsKey(host)) {
-                hostSizeCountMap.put(host, new HashMap<Integer, Integer>());
-            }
-            Map<Integer, Integer> sizeMap = hostSizeCountMap.get(host);
-            sizeMap.put(size, sizeMap.getOrDefault(size, 0) + 1);
+    /** 按 Host 和响应长度统计重复次数。 */
+    private Map<String, Map<String, Integer>> countSizesByHost(List<LogEntry> entries) {
+        Map<String, Map<String, Integer>> counts = new HashMap<String, Map<String, Integer>>();
+        for (LogEntry entry : entries) {
+            Map<String, Integer> sizeCounts = counts.computeIfAbsent(entry.host, key -> new HashMap<String, Integer>());
+            String size = normalizeLength(entry.length);
+            sizeCounts.put(size, sizeCounts.getOrDefault(size, 0) + 1);
         }
+        return counts;
     }
 
-    private boolean shouldShowEntry(LogEntry entry) {
-        if (enableFilterCheckBox == null || thresholdSpinner == null) {
+    /** 统一长度文本，空值也可以安全参与过滤。 */
+    private String normalizeLength(String length) {
+        return length == null ? "" : length.trim();
+    }
+
+    /** 根据当前重复阈值判断结果是否应显示。 */
+    private boolean shouldShowEntry(LogEntry entry, Map<String, Map<String, Integer>> counts, int threshold) {
+        Map<String, Integer> sizeCounts = counts.get(entry.host);
+        if (sizeCounts == null) {
             return true;
         }
-        if (!enableFilterCheckBox.isSelected()) {
-            return true;
-        }
-        int threshold = (Integer) thresholdSpinner.getValue();
-        synchronized (hostSizeCountMap) {
-            if (hostSizeCountMap.containsKey(entry.host)) {
-                Map<Integer, Integer> sizeMap = hostSizeCountMap.get(entry.host);
-                return sizeMap.getOrDefault(Integer.parseInt(entry.length), 0) <= threshold;
-            }
-        }
-        return true;
+        return sizeCounts.getOrDefault(normalizeLength(entry.length), 0) <= threshold;
     }
 
     private void refreshTable() {
-        SwingUtilities.invokeLater(() -> {
-            if (Utable == null || statusLabel == null) {
-                return;
-            }
-            int selectedRow = Utable.getSelectedRow();
-            Udatas.clear();
-            recalculateHostSizeCount();
-            synchronized (logEntries) {
-                for (LogEntry entry : logEntries) {
-                    if (shouldShowEntry(entry)) {
-                        Udatas.add(new TablesData(entry.name, entry.method, entry.url, entry.state, entry.info, entry.length, entry.requestResponse));
-                    }
-                }
-            }
-            fireTableDataChanged();
-            if (selectedRow >= 0 && selectedRow < Udatas.size()) {
-                Utable.setRowSelectionInterval(selectedRow, selectedRow);
-            }
-            updateStatusLabel();
-        });
+        if (SwingUtilities.isEventDispatchThread()) {
+            refreshTableOnEdt();
+        } else {
+            SwingUtilities.invokeLater(this::refreshTableOnEdt);
+        }
     }
 
-    private void recalculateHostSizeCount() {
-        synchronized (hostSizeCountMap) {
-            hostSizeCountMap.clear();
-            synchronized (logEntries) {
-                for (LogEntry entry : logEntries) {
-                    updateHostSizeCount(entry.host, Integer.parseInt(entry.length));
-                }
+    /**
+     * 仅在 Swing EDT 重建结果视图；历史数据本身不变，因此时间、编号和请求响应对象都会保留。
+     */
+    private void refreshTableOnEdt() {
+        if (Utable == null || statusLabel == null) {
+            return;
+        }
+        Integer selectedEntryId = getSelectedEntryId();
+        List<LogEntry> entries = snapshotLogEntries();
+        boolean filterEnabled = enableFilterCheckBox != null && enableFilterCheckBox.isSelected();
+        int threshold = thresholdSpinner != null && thresholdSpinner.getValue() instanceof Number
+                ? ((Number) thresholdSpinner.getValue()).intValue()
+                : 5;
+        Map<String, Map<String, Integer>> counts = filterEnabled
+                ? countSizesByHost(entries)
+                : Collections.emptyMap();
+
+        Udatas.clear();
+        for (LogEntry entry : entries) {
+            if (!filterEnabled || shouldShowEntry(entry, counts, threshold)) {
+                Udatas.add(new TablesData(entry));
             }
         }
+        fireTableDataChanged();
+        restoreSelection(selectedEntryId);
+        updateStatusLabel();
+    }
+
+    /** 将当前视图行转换成稳定的历史记录编号。 */
+    private Integer getSelectedEntryId() {
+        int selectedViewRow = Utable.getSelectedRow();
+        if (selectedViewRow < 0) {
+            return null;
+        }
+        int selectedModelRow = Utable.convertRowIndexToModel(selectedViewRow);
+        if (selectedModelRow < 0 || selectedModelRow >= Udatas.size()) {
+            return null;
+        }
+        return Udatas.get(selectedModelRow).id;
+    }
+
+    /** 刷新后按稳定编号恢复选中行。 */
+    private void restoreSelection(Integer entryId) {
+        if (entryId == null) {
+            return;
+        }
+        int modelRow = findDisplayedRowById(entryId);
+        if (modelRow >= 0) {
+            int viewRow = Utable.convertRowIndexToView(modelRow);
+            if (viewRow >= 0) {
+                Utable.setRowSelectionInterval(viewRow, viewRow);
+            }
+        }
+    }
+
+    /** 在当前过滤视图中查找指定历史记录。 */
+    private int findDisplayedRowById(int entryId) {
+        for (int i = 0; i < Udatas.size(); i++) {
+            if (Udatas.get(i).id == entryId) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private void clearHistory() {
@@ -270,52 +389,70 @@ public class Tags extends AbstractTableModel {
         }
         int result = JOptionPane.showConfirmDialog(top, t("confirm.clearHistory"), t("dialog.clearConfirm"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
         if (result == JOptionPane.YES_OPTION) {
-            synchronized (logEntries) {
-                logEntries.clear();
-            }
-            synchronized (hostSizeCountMap) {
-                hostSizeCountMap.clear();
-            }
-            Udatas.clear();
-            fireTableDataChanged();
-            HRequestTextEditor.setRequest(HttpRequest.httpRequest(""));
-            HResponseTextEditor.setResponse(HttpResponse.httpResponse(""));
-            updateStatusLabel();
+            clearHistoryData();
         }
     }
 
     public void clearDisplayedHistory() {
-        while (Udatas.size() != 0) {
-            Udatas.remove(0);
-            fireTableRowsDeleted(0, 0);
+        clearHistory();
+    }
+
+    /**
+     * “清空全部历史”同时清理数据源和当前视图，避免刷新后被删除的记录再次出现。
+     */
+    private void clearHistoryData() {
+        synchronized (logEntries) {
+            logEntries.clear();
         }
-        HRequestTextEditor.setRequest(HttpRequest.httpRequest(""));
-        HResponseTextEditor.setResponse(HttpResponse.httpResponse(""));
+        Udatas.clear();
+        currentlyDisplayedItem = null;
+        fireTableDataChanged();
+        clearMessageEditors();
         updateStatusLabel();
     }
 
     public void removeSelectedRows() {
-        int[] remId = Utable.getSelectedRows();
-        for (int i : reversal(remId)) {
-            Udatas.remove(i);
-            fireTableRowsDeleted(i, i);
-            HRequestTextEditor.setRequest(HttpRequest.httpRequest(""));
-            HResponseTextEditor.setResponse(HttpResponse.httpResponse(""));
+        if (Utable == null) {
+            return;
         }
-        updateStatusLabel();
+        int[] selectedRows = Utable.getSelectedRows();
+        Set<Integer> entryIds = new HashSet<Integer>();
+        for (int viewRow : selectedRows) {
+            int modelRow = Utable.convertRowIndexToModel(viewRow);
+            if (modelRow >= 0 && modelRow < Udatas.size()) {
+                entryIds.add(Udatas.get(modelRow).id);
+            }
+        }
+        if (entryIds.isEmpty()) {
+            return;
+        }
+        synchronized (logEntries) {
+            logEntries.removeIf(entry -> entryIds.contains(entry.id));
+        }
+        currentlyDisplayedItem = null;
+        clearMessageEditors();
+        refreshTableOnEdt();
     }
 
-    private Integer[] reversal(int[] intArray) {
-        Integer[] newScores = new Integer[intArray.length];
-        for (int i = 0; i < intArray.length; i++) {
-            newScores[i] = intArray[i];
+    /** 清空结果页的请求和响应详情。 */
+    private void clearMessageEditors() {
+        if (HRequestTextEditor != null) {
+            HRequestTextEditor.setRequest(HttpRequest.httpRequest(""));
         }
-        Arrays.sort(newScores, Collections.reverseOrder());
-        return newScores;
+        if (HResponseTextEditor != null) {
+            HResponseTextEditor.setResponse(HttpResponse.httpResponse(""));
+        }
     }
 
     private void updateStatusLabel() {
-        statusLabel.setText(t("status.records", Udatas.size(), logEntries.size()));
+        if (statusLabel == null) {
+            return;
+        }
+        int total;
+        synchronized (logEntries) {
+            total = logEntries.size();
+        }
+        statusLabel.setText(t("status.records", Udatas.size(), total));
     }
 
     @Override
@@ -366,33 +503,23 @@ public class Tags extends AbstractTableModel {
             case 0:
                 return datas.id;
             case 1:
-                return datas.VulName;
+                return datas.ruleName;
             case 2:
-                return datas.Method;
+                return datas.method;
             case 3:
                 return datas.url;
             case 4:
                 return datas.status;
             case 5:
-                return datas.Info;
+                return datas.info;
             case 6:
-                return datas.Size;
+                return datas.size;
             case 7:
                 return datas.startTime;
             case 8:
                 return datas.endTime;
             default:
                 return "";
-        }
-    }
-
-    public int add(String vulName, String method, String url, String status, String info, String size, HttpRequestResponse requestResponse) {
-        synchronized (this.Udatas) {
-            String startTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
-            int id = this.Udatas.size();
-            this.Udatas.add(new TablesData(id, vulName, method, url, status, info, size, requestResponse, startTime, ""));
-            fireTableRowsInserted(id, id);
-            return id;
         }
     }
 
@@ -408,7 +535,9 @@ public class Tags extends AbstractTableModel {
                 public void mouseClicked(MouseEvent e) {
                     if (e.getClickCount() == 2) {
                         int columnIndex = getColumnModel().getColumnIndexAtX(e.getX());
-                        toggleSortOrder(columnIndex);
+                        if (columnIndex >= 0) {
+                            toggleSortOrder(columnIndex);
+                        }
                     }
                 }
             });
@@ -416,10 +545,21 @@ public class Tags extends AbstractTableModel {
 
         @Override
         public void changeSelection(int row, int col, boolean toggle, boolean extend) {
-            TablesData dataEntry = Tags.this.Udatas.get(convertRowIndexToModel(row));
+            if (row < 0 || row >= getRowCount()) {
+                return;
+            }
+            int modelRow = convertRowIndexToModel(row);
+            if (modelRow < 0 || modelRow >= Tags.this.Udatas.size()) {
+                return;
+            }
+            TablesData dataEntry = Tags.this.Udatas.get(modelRow);
             currentlyDisplayedItem = dataEntry.requestResponse;
-            HRequestTextEditor.setRequest(currentlyDisplayedItem.request());
-            if (currentlyDisplayedItem.hasResponse()) {
+            if (currentlyDisplayedItem == null || currentlyDisplayedItem.request() == null) {
+                clearMessageEditors();
+            } else {
+                HRequestTextEditor.setRequest(currentlyDisplayedItem.request());
+            }
+            if (currentlyDisplayedItem != null && currentlyDisplayedItem.hasResponse()) {
                 HResponseTextEditor.setResponse(currentlyDisplayedItem.response());
             } else {
                 HResponseTextEditor.setResponse(HttpResponse.httpResponse(""));
@@ -428,6 +568,15 @@ public class Tags extends AbstractTableModel {
         }
 
         public void toggleSortOrder(int columnIndex) {
+            if (columnIndex < 0 || columnIndex >= getColumnCount()) {
+                return;
+            }
+            if (columnIndex == 4 || columnIndex == 6) {
+                sorter.setComparator(columnIndex, (Comparator<String>) Tags.this::compareNumericStrings);
+            } else {
+                sorter.setComparator(columnIndex, Comparator.nullsFirst(Comparator.naturalOrder()));
+            }
+
             List<? extends RowSorter.SortKey> sortKeys = sorter.getSortKeys();
             if (sortKeys.isEmpty()) {
                 sorter.toggleSortOrder(columnIndex);
@@ -439,46 +588,89 @@ public class Tags extends AbstractTableModel {
                     sorter.setSortKeys(Collections.singletonList(new RowSorter.SortKey(columnIndex, SortOrder.ASCENDING)));
                 }
             }
-
-            if (columnIndex == 4 || columnIndex == 6) {
-                sorter.setComparator(columnIndex, Comparator.comparingInt((String value) -> Integer.parseInt(value.trim())));
-            } else {
-                sorter.setComparator(columnIndex, Comparator.naturalOrder());
-            }
         }
     }
 
+    /**
+     * 状态码和长度列优先按数字排序；遇到空值或异常文本时回退到字符串排序，避免 EDT 抛异常。
+     */
+    private int compareNumericStrings(String left, String right) {
+        Long leftNumber = parseLong(left);
+        Long rightNumber = parseLong(right);
+        if (leftNumber != null && rightNumber != null) {
+            return leftNumber.compareTo(rightNumber);
+        }
+        if (leftNumber != null) {
+            return -1;
+        }
+        if (rightNumber != null) {
+            return 1;
+        }
+        String safeLeft = left == null ? "" : left;
+        String safeRight = right == null ? "" : right;
+        return safeLeft.compareTo(safeRight);
+    }
+
+    /** 安全解析排序字段；非法内容返回空值并由比较器降级处理。 */
+    private Long parseLong(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(value.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    /** 结果表使用的不可变显示行。 */
     public static class TablesData {
         final int id;
-        final String VulName;
-        final String Method;
+        final String ruleName;
+        final String method;
         final String url;
         final String status;
-        final String Info;
-        final String Size;
+        final String info;
+        final String size;
         final HttpRequestResponse requestResponse;
         final String startTime;
         final String endTime;
 
-        public TablesData(int id, String VulName, String Method, String url, String status, String Info, String Size, HttpRequestResponse requestResponse, String startTime, String endTime) {
+        public TablesData(int id, String ruleName, String method, String url, String status, String info, String size, HttpRequestResponse requestResponse, String startTime, String endTime) {
             this.id = id;
-            this.VulName = VulName;
-            this.Method = Method;
+            this.ruleName = ruleName;
+            this.method = method;
             this.url = url;
             this.status = status;
-            this.Info = Info;
-            this.Size = Size;
+            this.info = info;
+            this.size = size;
             this.requestResponse = requestResponse;
             this.startTime = startTime;
             this.endTime = endTime;
         }
 
-        public TablesData(String name, String method, String url, String state, String info, String length, HttpRequestResponse requestResponse) {
-            this(0, name, method, url, state, info, length, requestResponse, "", "");
+        /**
+         * 从历史数据创建显示行时完整复制不可变字段，尤其不能丢失开始和结束时间。
+         */
+        public TablesData(LogEntry entry) {
+            this(
+                    entry.id,
+                    entry.name,
+                    entry.method,
+                    entry.url,
+                    entry.state,
+                    entry.info,
+                    entry.length,
+                    entry.requestResponse,
+                    entry.startTime,
+                    entry.endTime
+            );
         }
     }
 
+    /** 结果历史的数据源，过滤和刷新不会修改其中的业务字段。 */
     public static class LogEntry {
+        public final int id;
         public final String name;
         public final String method;
         public final String url;
@@ -487,8 +679,24 @@ public class Tags extends AbstractTableModel {
         public final String length;
         public final HttpRequestResponse requestResponse;
         public final String host;
+        public final String startTime;
+        public final String endTime;
 
-        public LogEntry(String name, String method, String url, String state, String info, String length, HttpRequestResponse requestResponse, String host) {
+        /** 创建包含稳定编号和完整时间信息的历史记录。 */
+        public LogEntry(
+                int id,
+                String name,
+                String method,
+                String url,
+                String state,
+                String info,
+                String length,
+                HttpRequestResponse requestResponse,
+                String host,
+                String startTime,
+                String endTime
+        ) {
+            this.id = id;
             this.name = name;
             this.method = method;
             this.url = url;
@@ -497,6 +705,8 @@ public class Tags extends AbstractTableModel {
             this.length = length;
             this.requestResponse = requestResponse;
             this.host = host;
+            this.startTime = startTime;
+            this.endTime = endTime;
         }
     }
 
@@ -504,6 +714,9 @@ public class Tags extends AbstractTableModel {
         if (evt.getButton() == MouseEvent.BUTTON3) {
             int focusedRowIndex = this.Utable.rowAtPoint(evt.getPoint());
             if (focusedRowIndex != -1) {
+                if (!this.Utable.isRowSelected(focusedRowIndex)) {
+                    this.Utable.setRowSelectionInterval(focusedRowIndex, focusedRowIndex);
+                }
                 m_popupMenu.show(this.Utable, evt.getX(), evt.getY());
             }
         }

@@ -44,7 +44,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
 
     public static String Yaml_Path = System.getProperty("user.dir") + "/" + "Rules.yaml";
     public static String EXPAND_NAME = "RouteVulScan";
-    public static String VERSION = "2.0.3";
+    public static String VERSION = "2.0.4";
     private static final String LANGUAGE_PREFERENCE_KEY = "routevulscan.language";
     public static String Download_Yaml_protocol = "https";
     public static String Download_Yaml_host = "raw.githubusercontent.com";
