@@ -32,6 +32,9 @@ public class threads implements Runnable {
             vul.burp.noteTaskStarted();
             counted = true;
             go(this.zidian, this.vul, this.newHttpRequestResponse);
+        } catch (Throwable t) {
+            String ruleName = zidian == null ? "" : String.valueOf(zidian.get("name"));
+            vul.burp.logError(vul.burp.t("log.ruleExecutionFailed", ruleName), t);
         } finally {
             if (counted && !vul.isCancelled()) {
                 vul.burp.noteTaskFinished();
@@ -67,12 +70,15 @@ public class threads implements Runnable {
         String ruleMethod = String.valueOf(zidian.get("method"));
         HttpRequest request = buildScanRequest(vul, url, ruleMethod);
 
+        // 记录真实的请求发送区间，结果表刷新时直接复用该时间，不再临时重算。
+        long requestStartedAt = System.currentTimeMillis();
         HttpRequestResponse response = vul.burp.api.http().sendRequest(request);
+        long requestCompletedAt = System.currentTimeMillis();
         if (response == null || !response.hasResponse()) {
             return;
         }
 
-        matchResponse(vul, name, info, re, states, response);
+        matchResponse(vul, name, info, re, states, response, requestStartedAt, requestCompletedAt);
     }
 
     private static HttpRequest buildScanRequest(vulscan vul, URL url, String ruleMethod) {
@@ -90,7 +96,16 @@ public class threads implements Runnable {
         return request.withMethod("GET");
     }
 
-    private static boolean matchResponse(vulscan vul, String name, String info, String re, Collection<Integer> states, HttpRequestResponse response) {
+    private static boolean matchResponse(
+            vulscan vul,
+            String name,
+            String info,
+            String re,
+            Collection<Integer> states,
+            HttpRequestResponse response,
+            long requestStartedAt,
+            long requestCompletedAt
+    ) {
         if (vul.isCancelled()) {
             return false;
         }
@@ -114,7 +129,9 @@ public class threads implements Runnable {
                     statusCode + " ",
                     info,
                     String.valueOf(responseText.length()),
-                    response
+                    response,
+                    requestStartedAt,
+                    requestCompletedAt
             );
         }
         return true;

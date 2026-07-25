@@ -67,7 +67,7 @@ mvn clean package
 构建完成后，产物位于：
 
 ```bash
-target/RouteVulScan-V2.0.3.jar
+target/RouteVulScan-V2.0.4.jar
 ```
 
 ## 安装方式
@@ -78,7 +78,7 @@ target/RouteVulScan-V2.0.3.jar
 Extender -> Extensions -> Add
 ```
 
-选择 `target/RouteVulScan-V2.0.3.jar` 即可加载。
+选择 `target/RouteVulScan-V2.0.4.jar` 即可加载。
 
 ## 使用说明
 

@@ -6,7 +6,7 @@
 
     <groupId>io.github.f6jo</groupId>
     <artifactId>routevulscan</artifactId>
-    <version>2.0.3</version>
+    <version>2.0.4</version>
     <name>RouteVulScan</name>
     <description>Burp Suite Montoya extension for recursive route vulnerability scanning.</description>
 

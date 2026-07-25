@@ -7,10 +7,10 @@ import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import yaml.YamlUtil;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Hashtable;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -55,35 +55,52 @@ public class Bfunc {
         burp.Config_l.afterRulesReload();
     }
 
+    /**
+     * 解析单个状态码、逗号列表和闭区间，拒绝空片段、倒序区间及非 HTTP 状态码。
+     */
     public static Collection<Integer> StatusCodeProc(String state) {
-        Collection<Integer> stateList = new ArrayList<Integer>();
-        if (state.length() != 3 && (state.contains(",") || state.contains("-"))) {
-            if (state.contains(",")) {
-                String[] states = state.split(",");
-                for (String oneState : states) {
-                    if (oneState.contains("-")) {
-                        String[] parts = oneState.split("-");
-                        int start = Integer.parseInt(parts[0]);
-                        int end = Integer.parseInt(parts[1]);
-                        for (int i = start; i <= end; i++) {
-                            stateList.add(i);
-                        }
-                    } else if (oneState.length() == 3) {
-                        stateList.add(Integer.valueOf(oneState));
-                    }
-                }
-            } else {
-                String[] parts = state.split("-");
-                int start = Integer.parseInt(parts[0]);
-                int end = Integer.parseInt(parts[1]);
-                for (int i = start; i <= end; i++) {
-                    stateList.add(i);
-                }
-            }
-        } else {
-            stateList.add(Integer.valueOf(state));
+        if (state == null || state.trim().isEmpty()) {
+            throw new IllegalArgumentException("Status codes cannot be empty");
         }
-        return stateList;
+        Collection<Integer> statusCodes = new LinkedHashSet<Integer>();
+        String[] items = state.trim().split(",", -1);
+        for (String item : items) {
+            String token = item.trim();
+            if (token.isEmpty()) {
+                throw new IllegalArgumentException("Status code item cannot be empty");
+            }
+            String[] range = token.split("-", -1);
+            if (range.length == 1) {
+                statusCodes.add(parseStatusCode(range[0]));
+                continue;
+            }
+            if (range.length != 2) {
+                throw new IllegalArgumentException("Invalid status code range: " + token);
+            }
+            int start = parseStatusCode(range[0]);
+            int end = parseStatusCode(range[1]);
+            if (start > end) {
+                throw new IllegalArgumentException("Status code range is reversed: " + token);
+            }
+            for (int statusCode = start; statusCode <= end; statusCode++) {
+                statusCodes.add(statusCode);
+            }
+        }
+        return statusCodes;
+    }
+
+    /** 解析并校验单个标准 HTTP 状态码。 */
+    private static int parseStatusCode(String value) {
+        final int statusCode;
+        try {
+            statusCode = Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid status code: " + value.trim(), e);
+        }
+        if (statusCode < 100 || statusCode > 599) {
+            throw new IllegalArgumentException("Status code out of range: " + statusCode);
+        }
+        return statusCode;
     }
 
     public static String ProcTemplateLanguag(String template, HttpRequestResponse requestResponse, boolean escape) {
@@ -157,6 +174,9 @@ public class Bfunc {
     }
 
     public static String AnalyHost(String host, String mode) {
+        if (host == null || host.trim().isEmpty()) {
+            return "";
+        }
         String domain = host.split(":")[0];
         if (host.matches("^\\d+\\.\\d+\\.\\d+\\.\\d+$")) {
             return host;

@@ -498,12 +498,24 @@ public class Config {
             burp.prompt(one, t("prompt.ruleRequired"));
             return;
         }
+        try {
+            Bfunc.StatusCodeProc(state);
+        } catch (IllegalArgumentException e) {
+            burp.prompt(one, t("prompt.invalidStatusCodes", state));
+            return;
+        }
 
         Map<String, Object> yaml = YamlUtil.readYaml(yaml_path);
         List<Map<String, Object>> ruleList = (List<Map<String, Object>>) yaml.get("Load_List");
         int nextId = 1;
         for (Map<String, Object> zidian : ruleList) {
-            nextId = Math.max(nextId, Integer.parseInt(zidian.get("id").toString()) + 1);
+            if (zidian == null) {
+                continue;
+            }
+            Integer currentId = parseRuleId(zidian.get("id"));
+            if (currentId != null && currentId < Integer.MAX_VALUE) {
+                nextId = Math.max(nextId, currentId + 1);
+            }
         }
 
         java.util.HashMap<String, Object> saveMap = new java.util.HashMap<String, Object>();
@@ -527,6 +539,20 @@ public class Config {
         }
 
         reloadRulesAndRestoreSelection(group, editingRuleId);
+    }
+
+    /**
+     * 规则文件可能被手工编辑；无效 ID 不应阻断新规则保存。
+     */
+    private Integer parseRuleId(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(value.toString().trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private void deleteCurrentRule() {
