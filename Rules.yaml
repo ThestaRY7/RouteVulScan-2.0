@@ -46,12 +46,12 @@ Load_List:
   url: /config.zip, info: Config File Find !!!}
 - {method: GET, state: '200', name: Druid Monitor, url: /druid/index.html, id: 4,
   info: Druid Monitor Find!!!, loaded: true, type: Unauthorized, re: druid}
-- {loaded: true, re: ., method: GET, name: Jeecg-Boot, id: 73, state: '200', type: Vuln,
-  url: /jmreport/queryFieldBySql, info: Jeecg-Boot_RCE}
-- {loaded: true, re: ., method: GET, name: Jeecg-Boot, id: 74, state: '200', type: Vuln,
-  url: /jmreport/testConnection, info: Jeecg-Boot_RCE}
-- {loaded: true, re: ., method: GET, name: Jeecg-Boot, id: 75, state: '200', type: Vuln,
-  url: /jmreport/loadTableData, info: Jeecg-Boot_RCE}
+- {loaded: true, re: 'false', method: GET, name: Jeecg-Boot, id: 73, state: '200',
+  type: Vuln, url: /jmreport/queryFieldBySql, info: RCE}
+- {loaded: true, re: 'false', method: GET, name: Jeecg-Boot, id: 74, state: '200',
+  type: Vuln, url: /jmreport/testConnection, info: RCE}
+- {loaded: true, re: 'false', method: GET, name: Jeecg-Boot, id: 75, state: '200',
+  type: Vuln, url: /jmreport/loadTableData, info: RCE}
 - {loaded: true, re: jboss, method: GET, name: Jboss Unauthorized, id: 55, state: '200',
   type: Unauthorized, url: /jmx-console/, info: Jboss Unauthorized Find!!!}
 - {loaded: true, re: jboss, method: GET, name: Jboss Unauthorized, id: 56, state: '200',
@@ -80,3 +80,11 @@ Load_List:
     Console Find !!!}
 - {loaded: true, re: login, method: GET, name: Weblogic Console, id: 88, state: '200',
   type: Weblogic, url: /console/login/LoginForm.jsp, info: Login}
+- {loaded: true, re: ., method: GET, name: TongWeb, id: 90, state: '200', type: Vuln,
+  url: /ejbserver/ejb, info: TongWeb_RCE}
+- {loaded: true, re: state, method: GET, name: ueditor, id: 91, state: '200', type: Editor,
+  url: /ueditor/jsp/controller.jsp, info: ueditor_JSP}
+- {loaded: true, re: '"success":true', method: GET, name: Jeecg-Boot, id: 92, state: '200',
+  type: Vuln, url: '/sys/user/querySysUser?username=admin', info: jeecg-boot <= 2.4.5}
+- {loaded: true, re: smartbi.gcf.gcfutil, method: GET, name: SmartBI, id: 93, state: '200',
+  type: Vuln, url: /vision/index.jsp, info: ''}
