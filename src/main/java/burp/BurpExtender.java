@@ -48,7 +48,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
 
     public static String Yaml_Path = System.getProperty("user.dir") + "/" + "Rules.yaml";
     public static String EXPAND_NAME = "RouteVulScan";
-    public static String VERSION = "2.0.4";
+    public static String VERSION = "2.0.5";
     private static final String LANGUAGE_PREFERENCE_KEY = "routevulscan.language";
     private static final int MAX_PENDING_SCANS = 1_000;
     private static final int MAX_DEDUPLICATION_ENTRIES = 50_000;
