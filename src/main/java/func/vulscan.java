@@ -2,7 +2,6 @@ package func;
 
 import UI.Tags;
 import burp.BurpExtender;
-import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.params.ParsedHttpParameter;
 import burp.api.montoya.http.message.requests.HttpRequest;
@@ -10,7 +9,6 @@ import yaml.YamlUtil;
 
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -18,6 +16,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 public class vulscan {
+    private static final int MAX_RULES_PER_SCAN = 1_000;
 
     private final HttpRequestResponse source;
     private final HttpRequest seedRequest;
@@ -46,6 +45,10 @@ public class vulscan {
 
             Map<String, Object> yamlMap = YamlUtil.readYaml(burp.Config_l.yaml_path);
             List<Map<String, Object>> rules = (List<Map<String, Object>>) yamlMap.get("Load_List");
+            if (rules.size() > MAX_RULES_PER_SCAN) {
+                burp.logError(burp.t("log.ruleLimitExceeded", rules.size(), MAX_RULES_PER_SCAN));
+                rules = rules.subList(0, MAX_RULES_PER_SCAN);
+            }
 
             LaunchPath(paths, rules, source);
         } catch (Throwable t) {
@@ -154,11 +157,4 @@ public class vulscan {
         return this.forceCarryHeaders || this.burp.Carry_head;
     }
 
-    public static HashMap<String, String> AnalysisHeaders(List<HttpHeader> headers) {
-        HashMap<String, String> headMap = new HashMap<String, String>();
-        for (HttpHeader header : headers) {
-            headMap.put(header.name(), header.value());
-        }
-        return headMap;
-    }
 }

@@ -64,13 +64,13 @@ Load_List:
   url: /userLoginById, info: /userLoginById 200}
 - {loaded: true, re: not supported, method: GET, name: Ruoyi SSTI RCE, id: 89, state: '200',
   type: Vuln, url: /monitor/cache/getNames, info: Ruoyi SSTI RCE}
-- {loaded: true, re: ckfinder.js, method: GET, name: ckfinder, id: 61, state: '200',
+- {loaded: true, re: ckfinder.js, method: GET, name: ckfinder, id: 94, state: '200',
   type: Editor, url: /ckfinder/ckfinder.html, info: ckfinder Find!!!}
-- {loaded: true, re: ., method: GET, name: ueditor, id: 62, state: '200', type: Editor,
+- {loaded: true, re: ., method: GET, name: ueditor, id: 95, state: '200', type: Editor,
   url: '/UEditor/Process?action=catchimage', info: ueditor Find!!!}
-- {loaded: true, re: ., method: GET, name: Config File, id: 80, state: '200', type: Backup,
+- {loaded: true, re: ., method: GET, name: Config File, id: 96, state: '200', type: Backup,
   url: /config.zip, info: Config File Find !!!}
-- {loaded: true, re: ., method: GET, name: Config File, id: 81, state: '200', type: Backup,
+- {loaded: true, re: ., method: GET, name: Config File, id: 97, state: '200', type: Backup,
   url: /config.tar, info: Config File Find !!!}
 - {loaded: true, re: weblogic server, method: GET, name: Weblogic CVE-2020-14882,
   id: 53, state: '200', type: Weblogic, url: /console/css/%252e%252e%252fconsole.portal,
