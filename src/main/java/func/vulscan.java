@@ -2,7 +2,6 @@ package func;
 
 import UI.Tags;
 import burp.BurpExtender;
-import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.params.ParsedHttpParameter;
 import burp.api.montoya.http.message.requests.HttpRequest;
@@ -10,7 +9,6 @@ import yaml.YamlUtil;
 
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -159,11 +157,4 @@ public class vulscan {
         return this.forceCarryHeaders || this.burp.Carry_head;
     }
 
-    public static HashMap<String, String> AnalysisHeaders(List<HttpHeader> headers) {
-        HashMap<String, String> headMap = new HashMap<String, String>();
-        for (HttpHeader header : headers) {
-            headMap.put(header.name(), header.value());
-        }
-        return headMap;
-    }
 }

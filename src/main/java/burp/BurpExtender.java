@@ -12,7 +12,6 @@ import burp.api.montoya.http.handler.HttpResponseReceived;
 import burp.api.montoya.http.handler.RequestToBeSentAction;
 import burp.api.montoya.http.handler.ResponseReceivedAction;
 import burp.api.montoya.http.message.HttpRequestResponse;
-import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.logging.Logging;
 import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
@@ -510,81 +509,6 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
                 submitScan(requestResponse, null, t("menu.send"));
             }
         }
-    }
-
-    private void showHeaderDialog(List<HttpRequestResponse> selected) {
-        HttpRequest baseRequest = selected.get(0).request();
-        JTextArea textArea = new JTextArea(12, 60);
-        StringBuilder headerText = new StringBuilder();
-        for (HttpHeader header : baseRequest.headers()) {
-            headerText.append(header.toString()).append('\n');
-        }
-        textArea.setText(headerText.toString());
-
-        int result = JOptionPane.showConfirmDialog(
-                tags != null ? tags.getUiComponent() : null,
-                new JScrollPane(textArea),
-                t("dialog.customHeaders"),
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.PLAIN_MESSAGE
-        );
-        if (result != JOptionPane.OK_OPTION) {
-            return;
-        }
-
-        List<String> lines = parseHeaderLines(textArea.getText());
-        if (lines == null) {
-            prompt(null, t("prompt.invalidHeaders"));
-            return;
-        }
-
-        for (HttpRequestResponse requestResponse : selected) {
-            try {
-                HttpRequest request = applyCustomHeaders(requestResponse.request(), lines);
-                submitScan(requestResponse, request, t("menu.send"));
-            } catch (Throwable t) {
-                logError(this.t("log.applyHeadersFailed"), t);
-            }
-        }
-    }
-
-    public HttpRequest applyCarryHeaders(HttpRequest request, List<HttpHeader> carryHeaders) {
-        HttpRequest updated = request;
-        for (HttpHeader header : carryHeaders) {
-            String name = header.name();
-            if ("Content-Length".equalsIgnoreCase(name) || "Transfer-Encoding".equalsIgnoreCase(name)) {
-                continue;
-            }
-            updated = updated.withUpdatedHeader(name, header.value());
-        }
-        return updated;
-    }
-
-    public HttpRequest applyCustomHeaders(HttpRequest request, List<String> headerLines) {
-        HttpRequest updated = request;
-        for (String line : headerLines) {
-            int splitIndex = line.indexOf(':');
-            if (splitIndex <= 0) {
-                continue;
-            }
-            String name = line.substring(0, splitIndex).trim();
-            String value = line.substring(splitIndex + 1).trim();
-            updated = updated.withUpdatedHeader(name, value);
-        }
-        return updated;
-    }
-
-    public static List<String> parseHeaderLines(String headerText) {
-        if (headerText == null || headerText.trim().isEmpty()) {
-            return null;
-        }
-        List<String> rows = new ArrayList<String>();
-        for (String row : headerText.split("\\R")) {
-            if (!row.trim().isEmpty()) {
-                rows.add(row.trim());
-            }
-        }
-        return rows.isEmpty() ? null : rows;
     }
 
     public void prompt(Component component, String message) {
