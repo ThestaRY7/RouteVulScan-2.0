@@ -86,11 +86,13 @@ Select `target/RouteVulScan-V2.0.4.jar` to load the extension.
 ## Usage
 
 1. Load the extension in Burp.
-2. On first startup, the extension will generate or use `Rules.yaml` in the current working directory.
+2. On first startup, the extension writes its bundled rules to `Rules.yaml` in the current working directory; an existing rule file is never overwritten.
 3. Enable the options you need on the configuration page, such as passive scanning and carrying request headers.
 4. Test the target site normally. The extension will automatically and recursively check each path level.
 5. View matched records on the results page, along with the corresponding request and response.
 6. To run supplemental scanning for a specific site, right-click a request and send it to RouteVulScan.
+
+To protect long-running Burp sessions, the extension retains at most 5,000 findings and 50,000 URL deduplication entries. The pending scan queue and per-scan rule count are both limited to 1,000. Each request has a 30-second response timeout; bodies larger than 5 MiB are not regex-matched, and a regex operation is stopped after 2 seconds. Every limit event is written to the Burp Errors panel.
 
 ## Rule Description
 
@@ -100,9 +102,9 @@ The rule file is `Rules.yaml`. Each rule can define:
 - `loaded`: whether the rule is enabled
 - `name`: rule name
 - `method`: request method
-- `url`: path suffix
-- `re`: matching regular expression
-- `info`: match description
+- `url`: path
+- `re`: regex
+- `info`: info
 - `state`: status code; supports a single value, comma-separated values, or ranges
 
 ## Acknowledgements

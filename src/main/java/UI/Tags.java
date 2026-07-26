@@ -28,9 +28,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class Tags extends AbstractTableModel {
+    private static final int MAX_HISTORY_ENTRIES = 5_000;
+
     public final BurpExtender burp;
     public final Config config;
 
@@ -56,6 +59,9 @@ public class Tags extends AbstractTableModel {
     public HttpResponseEditor HResponseTextEditor;
     private HttpRequestResponse currentlyDisplayedItem;
     private final List<LogEntry> logEntries = new ArrayList<LogEntry>();
+    private final Map<String, Map<String, Integer>> sizeCountsByHost = new HashMap<String, Map<String, Integer>>();
+    private final Set<Integer> displayedEntryIds = new HashSet<Integer>();
+    private final Set<String> hiddenSizeGroups = new HashSet<String>();
     private int nextEntryId;
 
     public Tags(BurpExtender burp, Config config) {
@@ -197,6 +203,7 @@ public class Tags extends AbstractTableModel {
             long endTimeMillis
     ) {
         LogEntry entry;
+        LogEntry evictedEntry = null;
         synchronized (logEntries) {
             entry = new LogEntry(
                     nextEntryId++,
@@ -212,8 +219,14 @@ public class Tags extends AbstractTableModel {
                     formatTime(endTimeMillis)
             );
             logEntries.add(entry);
+            incrementSizeCount(entry);
+            if (logEntries.size() > MAX_HISTORY_ENTRIES) {
+                evictedEntry = logEntries.remove(0);
+                decrementSizeCount(evictedEntry);
+            }
         }
 
+        LogEntry finalEvictedEntry = evictedEntry;
         SwingUtilities.invokeLater(() -> {
             if (enableFilterCheckBox == null || statusLabel == null) {
                 return;
@@ -222,15 +235,82 @@ public class Tags extends AbstractTableModel {
             if (!containsLogEntry(entry.id)) {
                 return;
             }
-            if (enableFilterCheckBox.isSelected()) {
-                refreshTableOnEdt();
-            } else if (findDisplayedRowById(entry.id) < 0) {
+            if (finalEvictedEntry != null) {
+                updateAfterEvictionOnEdt(finalEvictedEntry, entry);
+            } else if (enableFilterCheckBox.isSelected()) {
+                updateFilteredEntryOnEdt(entry);
+            } else if (displayedEntryIds.add(entry.id)) {
                 int row = Udatas.size();
                 Udatas.add(new TablesData(entry));
                 fireTableRowsInserted(row, row);
                 updateStatusLabel();
             }
         });
+    }
+
+    /**
+     * 增量处理历史上限淘汰；只有隐藏分组降回阈值内时才需要重建有界视图。
+     */
+    private void updateAfterEvictionOnEdt(LogEntry evictedEntry, LogEntry addedEntry) {
+        removeDisplayedEntryOnEdt(evictedEntry.id);
+        if (!enableFilterCheckBox.isSelected()) {
+            addDisplayedEntryOnEdt(addedEntry);
+            updateStatusLabel();
+            return;
+        }
+
+        int threshold = thresholdSpinner != null && thresholdSpinner.getValue() instanceof Number
+                ? ((Number) thresholdSpinner.getValue()).intValue()
+                : 5;
+        String evictedGroupKey = sizeGroupKey(evictedEntry.host, evictedEntry.length);
+        if (hiddenSizeGroups.contains(evictedGroupKey) && currentSizeCount(evictedEntry) <= threshold) {
+            refreshTableOnEdt();
+            return;
+        }
+        updateFilteredEntryOnEdt(addedEntry);
+    }
+
+    /** 从当前显示模型中删除指定稳定编号的结果。 */
+    private void removeDisplayedEntryOnEdt(int entryId) {
+        int row = findDisplayedRowById(entryId);
+        displayedEntryIds.remove(entryId);
+        if (row >= 0) {
+            Udatas.remove(row);
+            fireTableRowsDeleted(row, row);
+        }
+    }
+
+    /** 向当前显示模型追加尚未显示的结果。 */
+    private void addDisplayedEntryOnEdt(LogEntry entry) {
+        if (displayedEntryIds.add(entry.id)) {
+            int row = Udatas.size();
+            Udatas.add(new TablesData(entry));
+            fireTableRowsInserted(row, row);
+        }
+    }
+
+    /** 增量更新过滤视图；同一 Host/Size 首次越过阈值时只移除对应分组。 */
+    private void updateFilteredEntryOnEdt(LogEntry entry) {
+        int threshold = thresholdSpinner != null && thresholdSpinner.getValue() instanceof Number
+                ? ((Number) thresholdSpinner.getValue()).intValue()
+                : 5;
+        String groupKey = sizeGroupKey(entry.host, entry.length);
+        int duplicateCount = currentSizeCount(entry);
+        if (duplicateCount > threshold) {
+            if (hiddenSizeGroups.add(groupKey)) {
+                Udatas.removeIf(data -> {
+                    boolean sameGroup = Objects.equals(groupKey, sizeGroupKey(data.host, data.size));
+                    if (sameGroup) {
+                        displayedEntryIds.remove(data.id);
+                    }
+                    return sameGroup;
+                });
+                fireTableDataChanged();
+            }
+        } else {
+            addDisplayedEntryOnEdt(entry);
+        }
+        updateStatusLabel();
     }
 
     /** 将毫秒时间戳转换为结果表使用的本地时间文本。 */
@@ -296,6 +376,57 @@ public class Tags extends AbstractTableModel {
         return counts;
     }
 
+    /** 在历史锁内增加一条 Host/Size 计数。 */
+    private void incrementSizeCount(LogEntry entry) {
+        Map<String, Integer> sizeCounts = sizeCountsByHost.computeIfAbsent(
+                entry.host,
+                key -> new HashMap<String, Integer>()
+        );
+        String size = normalizeLength(entry.length);
+        sizeCounts.put(size, sizeCounts.getOrDefault(size, 0) + 1);
+    }
+
+    /** 在历史锁内减少一条 Host/Size 计数，并清理空分组。 */
+    private void decrementSizeCount(LogEntry entry) {
+        Map<String, Integer> sizeCounts = sizeCountsByHost.get(entry.host);
+        if (sizeCounts == null) {
+            return;
+        }
+        String size = normalizeLength(entry.length);
+        int count = sizeCounts.getOrDefault(size, 0) - 1;
+        if (count <= 0) {
+            sizeCounts.remove(size);
+        } else {
+            sizeCounts.put(size, count);
+        }
+        if (sizeCounts.isEmpty()) {
+            sizeCountsByHost.remove(entry.host);
+        }
+    }
+
+    /** 读取当前历史中指定 Host/Size 的计数。 */
+    private int currentSizeCount(LogEntry entry) {
+        synchronized (logEntries) {
+            Map<String, Integer> sizeCounts = sizeCountsByHost.get(entry.host);
+            return sizeCounts == null
+                    ? 0
+                    : sizeCounts.getOrDefault(normalizeLength(entry.length), 0);
+        }
+    }
+
+    /** 使用不可混淆分隔符构造 Host/Size 分组键。 */
+    private String sizeGroupKey(String host, String length) {
+        return String.valueOf(host) + "\n" + normalizeLength(length);
+    }
+
+    /** 删除后按剩余历史重建 Host/Size 计数，确保过滤状态准确。 */
+    private void rebuildSizeCounts() {
+        sizeCountsByHost.clear();
+        for (LogEntry entry : logEntries) {
+            incrementSizeCount(entry);
+        }
+    }
+
     /** 统一长度文本，空值也可以安全参与过滤。 */
     private String normalizeLength(String length) {
         return length == null ? "" : length.trim();
@@ -336,9 +467,14 @@ public class Tags extends AbstractTableModel {
                 : Collections.emptyMap();
 
         Udatas.clear();
+        displayedEntryIds.clear();
+        hiddenSizeGroups.clear();
         for (LogEntry entry : entries) {
             if (!filterEnabled || shouldShowEntry(entry, counts, threshold)) {
                 Udatas.add(new TablesData(entry));
+                displayedEntryIds.add(entry.id);
+            } else {
+                hiddenSizeGroups.add(sizeGroupKey(entry.host, entry.length));
             }
         }
         fireTableDataChanged();
@@ -403,8 +539,11 @@ public class Tags extends AbstractTableModel {
     private void clearHistoryData() {
         synchronized (logEntries) {
             logEntries.clear();
+            sizeCountsByHost.clear();
         }
         Udatas.clear();
+        displayedEntryIds.clear();
+        hiddenSizeGroups.clear();
         currentlyDisplayedItem = null;
         fireTableDataChanged();
         clearMessageEditors();
@@ -428,6 +567,7 @@ public class Tags extends AbstractTableModel {
         }
         synchronized (logEntries) {
             logEntries.removeIf(entry -> entryIds.contains(entry.id));
+            rebuildSizeCounts();
         }
         currentlyDisplayedItem = null;
         clearMessageEditors();
@@ -633,10 +773,16 @@ public class Tags extends AbstractTableModel {
         final String info;
         final String size;
         final HttpRequestResponse requestResponse;
+        final String host;
         final String startTime;
         final String endTime;
 
         public TablesData(int id, String ruleName, String method, String url, String status, String info, String size, HttpRequestResponse requestResponse, String startTime, String endTime) {
+            this(id, ruleName, method, url, status, info, size, requestResponse, "<unknown>", startTime, endTime);
+        }
+
+        /** 创建包含 Host 分组键的完整显示行。 */
+        private TablesData(int id, String ruleName, String method, String url, String status, String info, String size, HttpRequestResponse requestResponse, String host, String startTime, String endTime) {
             this.id = id;
             this.ruleName = ruleName;
             this.method = method;
@@ -645,6 +791,7 @@ public class Tags extends AbstractTableModel {
             this.info = info;
             this.size = size;
             this.requestResponse = requestResponse;
+            this.host = host;
             this.startTime = startTime;
             this.endTime = endTime;
         }
@@ -662,6 +809,7 @@ public class Tags extends AbstractTableModel {
                     entry.info,
                     entry.length,
                     entry.requestResponse,
+                    entry.host,
                     entry.startTime,
                     entry.endTime
             );

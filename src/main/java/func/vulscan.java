@@ -18,6 +18,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 public class vulscan {
+    private static final int MAX_RULES_PER_SCAN = 1_000;
 
     private final HttpRequestResponse source;
     private final HttpRequest seedRequest;
@@ -46,6 +47,10 @@ public class vulscan {
 
             Map<String, Object> yamlMap = YamlUtil.readYaml(burp.Config_l.yaml_path);
             List<Map<String, Object>> rules = (List<Map<String, Object>>) yamlMap.get("Load_List");
+            if (rules.size() > MAX_RULES_PER_SCAN) {
+                burp.logError(burp.t("log.ruleLimitExceeded", rules.size(), MAX_RULES_PER_SCAN));
+                rules = rules.subList(0, MAX_RULES_PER_SCAN);
+            }
 
             LaunchPath(paths, rules, source);
         } catch (Throwable t) {

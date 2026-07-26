@@ -8,7 +8,6 @@ import javax.swing.border.TitledBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -249,8 +248,8 @@ public class Config {
         addFormRow(form, gbc, "form.ruleName", ruleNameField);
         addFormRow(form, gbc, "form.method", ruleMethodBox);
         addFormRow(form, gbc, "form.group", ruleGroupBox);
-        addFormRow(form, gbc, "form.pathSuffix", ruleUrlField);
-        addFormRow(form, gbc, "form.responseRegex", new JScrollPane(ruleRegexArea));
+        addFormRow(form, gbc, "form.path", ruleUrlField);
+        addFormRow(form, gbc, "form.regex", new JScrollPane(ruleRegexArea));
         addFormRow(form, gbc, "form.info", new JScrollPane(ruleInfoArea));
         addFormRow(form, gbc, "form.statusCodes", ruleStateField);
 
@@ -529,12 +528,21 @@ public class Config {
         saveMap.put("info", info);
         saveMap.put("state", state);
 
+        boolean saved;
         if (editingRuleId == null) {
-            YamlUtil.addYaml(saveMap, yaml_path);
+            saved = YamlUtil.addYaml(saveMap, yaml_path);
+            if (!saved) {
+                burp.prompt(one, t("prompt.ruleSaveFailed"));
+                return;
+            }
             editingRuleId = String.valueOf(saveMap.get("id"));
             editorStateLabel.setText(t("editor.created", editingRuleId));
         } else {
-            YamlUtil.updateYaml(saveMap, yaml_path);
+            saved = YamlUtil.updateYaml(saveMap, yaml_path);
+            if (!saved) {
+                burp.prompt(one, t("prompt.ruleSaveFailed"));
+                return;
+            }
             editorStateLabel.setText(t("editor.saved", editingRuleId));
         }
 
@@ -565,7 +573,10 @@ public class Config {
             return;
         }
         String group = getCurrentGroupName();
-        YamlUtil.removeYaml(editingRuleId, yaml_path);
+        if (!YamlUtil.removeYaml(editingRuleId, yaml_path)) {
+            burp.prompt(one, t("prompt.ruleDeleteFailed"));
+            return;
+        }
         prepareNewRuleForGroup(group);
         reloadRulesAndRestoreSelection(group, null);
     }
@@ -593,26 +604,12 @@ public class Config {
             return;
         }
 
-        View view = burp.views.get(current);
-        if (view == null) {
+        String normalizedName = renamed.trim();
+        if (!YamlUtil.renameRuleGroup(current, normalizedName, yaml_path)) {
+            burp.prompt(one, t("prompt.ruleSaveFailed"));
             return;
         }
-
-        for (View.LogEntry logEntry : view.log) {
-            java.util.Hashtable<String, Object> updateMap = new java.util.Hashtable<String, Object>();
-            updateMap.put("id", Integer.parseInt(logEntry.id));
-            updateMap.put("type", renamed.trim());
-            updateMap.put("loaded", logEntry.loaded);
-            updateMap.put("name", logEntry.name);
-            updateMap.put("method", logEntry.method);
-            updateMap.put("url", logEntry.url);
-            updateMap.put("re", logEntry.re);
-            updateMap.put("info", logEntry.info);
-            updateMap.put("state", logEntry.state);
-            YamlUtil.updateYaml(updateMap, yaml_path);
-        }
-
-        reloadRulesAndRestoreSelection(renamed.trim(), editingRuleId);
+        reloadRulesAndRestoreSelection(normalizedName, editingRuleId);
     }
 
     private void deleteCurrentGroup() {
@@ -626,11 +623,9 @@ public class Config {
             return;
         }
 
-        View view = burp.views.get(current);
-        if (view != null) {
-            for (View.LogEntry logEntry : new ArrayList<View.LogEntry>(view.log)) {
-                YamlUtil.removeYaml(logEntry.id, yaml_path);
-            }
+        if (!YamlUtil.removeRuleGroup(current, yaml_path)) {
+            burp.prompt(one, t("prompt.ruleDeleteFailed"));
+            return;
         }
         editingRuleId = null;
         reloadRulesAndRestoreSelection(null, null);

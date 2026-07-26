@@ -17,7 +17,6 @@
         <junit.jupiter.version>5.10.2</junit.jupiter.version>
         <montoya.api.version>2025.11</montoya.api.version>
         <snakeyaml.version>2.6</snakeyaml.version>
-        <forms.rt.version>7.0.3</forms.rt.version>
     </properties>
 
     <dependencies>
@@ -33,11 +32,6 @@
             <version>${snakeyaml.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.intellij</groupId>
-            <artifactId>forms_rt</artifactId>
-            <version>${forms.rt.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.jupiter.version}</version>
@@ -46,6 +40,17 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>${project.basedir}</directory>
+                <includes>
+                    <include>Rules.yaml</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

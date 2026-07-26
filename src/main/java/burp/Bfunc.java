@@ -22,19 +22,21 @@ public class Bfunc {
         Map<String, Object> jieguo = YamlUtil.readYaml(BurpExtender.Yaml_Path);
         List<Map<String, Object>> rule_list = (List<Map<String, Object>>) jieguo.get("Load_List");
         for (Map<String, Object> zidian : rule_list) {
-            String type = (String) zidian.get("type");
-            String id = String.valueOf(zidian.get("id"));
-            String name = (String) zidian.get("name");
-            String url = (String) zidian.get("url");
-            String re = (String) zidian.get("re");
-            String info = (String) zidian.get("info");
-            String state = (String) zidian.get("state");
-            String method = (String) zidian.get("method");
+            if (zidian == null) {
+                BurpExtender.logStaticError(I18n.t("log.invalidLocalRule", "null"));
+                continue;
+            }
+            String type = stringField(zidian, "type", "default");
+            String id = stringField(zidian, "id", "");
+            String name = stringField(zidian, "name", "");
+            String url = stringField(zidian, "url", "");
+            String re = stringField(zidian, "re", "");
+            String info = stringField(zidian, "info", "");
+            String state = stringField(zidian, "state", "");
+            String method = stringField(zidian, "method", "GET");
             boolean loaded = Boolean.parseBoolean(String.valueOf(zidian.get("loaded")));
 
-            if (type == null || type.trim().isEmpty()) {
-                zidian.put("type", "default");
-                YamlUtil.updateYaml(zidian, BurpExtender.Yaml_Path);
+            if (type.trim().isEmpty()) {
                 type = "default";
             }
 
@@ -44,6 +46,12 @@ public class Bfunc {
             views.get(type).log.add(new View.LogEntry(id, type, loaded, name, method, url, re, info, state));
         }
         return views;
+    }
+
+    /** 将手工 YAML 中的数字等标量安全转换为文本，空值使用明确默认值。 */
+    private static String stringField(Map<String, Object> rule, String key, String defaultValue) {
+        Object value = rule.get(key);
+        return value == null ? defaultValue : String.valueOf(value);
     }
 
     public static void show_yaml(BurpExtender burp) {

@@ -5,6 +5,7 @@ import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.core.ToolType;
 import burp.api.montoya.extension.ExtensionUnloadingHandler;
+import burp.api.montoya.http.RequestOptions;
 import burp.api.montoya.http.handler.HttpHandler;
 import burp.api.montoya.http.handler.HttpRequestToBeSent;
 import burp.api.montoya.http.handler.HttpResponseReceived;
@@ -18,6 +19,7 @@ import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
 import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider;
 import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
 import func.vulscan;
+import utils.BoundedSet;
 import utils.UrlRepeat;
 import yaml.YamlUtil;
 
@@ -29,13 +31,16 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -46,6 +51,9 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
     public static String EXPAND_NAME = "RouteVulScan";
     public static String VERSION = "2.0.4";
     private static final String LANGUAGE_PREFERENCE_KEY = "routevulscan.language";
+    private static final int MAX_PENDING_SCANS = 1_000;
+    private static final int MAX_DEDUPLICATION_ENTRIES = 50_000;
+    private static final long SCAN_RESPONSE_TIMEOUT_MILLIS = 30_000L;
     public static String Download_Yaml_protocol = "https";
     public static String Download_Yaml_host = "raw.githubusercontent.com";
     public static int Download_Yaml_port = 443;
@@ -61,10 +69,10 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
     private ExecutorService scanCoordinatorPool;
     public boolean Carry_head = false;
     public boolean on_off = false;
-    public final Set<String> history_url = Collections.synchronizedSet(new LinkedHashSet<String>());
+    public final Set<String> history_url = new BoundedSet<String>(MAX_DEDUPLICATION_ENTRIES);
     public Map<String, View> views;
     public JTextField Host_txtfield;
-    private final UrlRepeat urlC = new UrlRepeat();
+    private final UrlRepeat urlC = new UrlRepeat(MAX_DEDUPLICATION_ENTRIES);
     private final AtomicInteger scanGeneration = new AtomicInteger(0);
     private final AtomicInteger activeScans = new AtomicInteger(0);
     private final AtomicInteger pathsQueued = new AtomicInteger(0);
@@ -96,11 +104,12 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
         });
 
         try {
-            YamlUtil.writeYaml(YamlUtil.readYaml(Yaml_Path), Yaml_Path);
+            // 读取失败时只记录错误并保留原文件，禁止在初始化阶段把异常规则覆盖为空列表。
+            YamlUtil.readYaml(Yaml_Path);
             this.Config_l = new Config(this);
             this.tags = new Tags(this, Config_l);
             this.ThreadPool = Executors.newFixedThreadPool(getConfiguredThreadCount());
-            this.scanCoordinatorPool = Executors.newSingleThreadExecutor(namedThreadFactory("RouteVulScan-scan-coordinator"));
+            this.scanCoordinatorPool = createScanCoordinatorPool();
             Component suiteTab = tags.getUiComponent();
             if (suiteTab == null) {
                 throw new IllegalStateException("RouteVulScan UI root component was not created");
@@ -166,7 +175,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
 
     private synchronized ExecutorService ensureScanCoordinatorPool() {
         if (this.scanCoordinatorPool == null || this.scanCoordinatorPool.isShutdown() || this.scanCoordinatorPool.isTerminated()) {
-            this.scanCoordinatorPool = Executors.newSingleThreadExecutor(namedThreadFactory("RouteVulScan-scan-coordinator"));
+            this.scanCoordinatorPool = createScanCoordinatorPool();
         }
         return this.scanCoordinatorPool;
     }
@@ -176,6 +185,13 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
             this.ThreadPool.shutdownNow();
         }
         this.ThreadPool = Executors.newFixedThreadPool(getConfiguredThreadCount());
+    }
+
+    /** 清空尚未开始的协调任务，避免取消后继续等待陈旧扫描逐条出队。 */
+    private synchronized void clearPendingScans() {
+        if (this.scanCoordinatorPool instanceof ThreadPoolExecutor coordinator) {
+            coordinator.getQueue().clear();
+        }
     }
 
     private static ThreadFactory namedThreadFactory(String namePrefix) {
@@ -191,18 +207,43 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
         };
     }
 
+    /** 创建单线程有界扫描协调器，队列满时由提交方记录并安全跳过新任务。 */
+    private static ExecutorService createScanCoordinatorPool() {
+        return new ThreadPoolExecutor(
+                1,
+                1,
+                0L,
+                TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<Runnable>(MAX_PENDING_SCANS),
+                namedThreadFactory("RouteVulScan-scan-coordinator"),
+                new ThreadPoolExecutor.AbortPolicy()
+        );
+    }
+
     public void submitScan(HttpRequestResponse requestResponse, HttpRequest requestOverride, String triggerSource) {
         submitScan(requestResponse, requestOverride, triggerSource, false);
     }
 
     public void submitScan(HttpRequestResponse requestResponse, HttpRequest requestOverride, String triggerSource, boolean forceCarryHeaders) {
         int queuedGeneration = getScanGeneration();
-        ensureScanCoordinatorPool().submit(() -> {
-            if (queuedGeneration != getScanGeneration()) {
-                return;
-            }
-            new vulscan(this, requestResponse, requestOverride, triggerSource, forceCarryHeaders);
-        });
+        try {
+            ensureScanCoordinatorPool().submit(() -> {
+                if (queuedGeneration != getScanGeneration()) {
+                    return;
+                }
+                new vulscan(this, requestResponse, requestOverride, triggerSource, forceCarryHeaders);
+            });
+        } catch (RejectedExecutionException e) {
+            notePathSkipped();
+            logError(t("log.scanQueueFull", MAX_PENDING_SCANS));
+        }
+    }
+
+    /** 使用 Montoya 官方请求选项发送扫描请求，并设置真实的响应超时。 */
+    public HttpRequestResponse sendScanRequest(HttpRequest request) {
+        RequestOptions options = RequestOptions.requestOptions()
+                .withResponseTimeout(SCAN_RESPONSE_TIMEOUT_MILLIS);
+        return api.http().sendRequest(request, options);
     }
 
     public void beginScanSession() {
@@ -211,9 +252,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
     }
 
     public void endScanSession() {
-        if (activeScans.get() > 0) {
-            activeScans.decrementAndGet();
-        }
+        activeScans.updateAndGet(current -> Math.max(0, current - 1));
         notifyProgressChanged();
     }
 
@@ -233,9 +272,7 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
     }
 
     public void noteTaskFinished() {
-        if (runningTasks.get() > 0) {
-            runningTasks.decrementAndGet();
-        }
+        runningTasks.updateAndGet(current -> Math.max(0, current - 1));
         finishedTasks.incrementAndGet();
         notifyProgressChanged();
     }
@@ -257,7 +294,9 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
 
     public void cancelActiveScans() {
         scanGeneration.incrementAndGet();
+        clearPendingScans();
         resetThreadPool();
+        runningTasks.set(0);
         notifyProgressChanged();
     }
 
@@ -305,12 +344,12 @@ public class BurpExtender implements BurpExtension, HttpHandler, ContextMenuItem
         matchesFound.set(0);
         timeoutCount.set(0);
         skippedPaths.set(0);
-        activeScans.set(0);
         notifyProgressChanged();
     }
 
     public synchronized void resetScanProgressAndReloadRules() {
         scanGeneration.incrementAndGet();
+        clearPendingScans();
         resetThreadPool();
         history_url.clear();
         urlC.clear();

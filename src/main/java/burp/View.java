@@ -48,10 +48,12 @@ public class View extends AbstractTableModel {
             public void mousePressed(MouseEvent e) {
                 // 点击复选框的操作
                 if (e.getClickCount() == 1) {
-                    int row = logTable.getSelectedRow();
-                    int column = logTable.getSelectedColumn();
+                    int viewRow = logTable.rowAtPoint(e.getPoint());
+                    int viewColumn = logTable.columnAtPoint(e.getPoint());
+                    int column = viewColumn < 0 ? -1 : logTable.convertColumnIndexToModel(viewColumn);
                     //复选框在哪列填多少，限制鼠标点击的位置
-                    if (column == 0) {
+                    if (column == 0 && viewRow >= 0) {
+                        int row = logTable.convertRowIndexToModel(viewRow);
                         LogEntry logEntry = log.get(row);
                         Map<String, Object> add_map = new HashMap<String, Object>();
                         add_map.put("id", Integer.parseInt(logEntry.id));
@@ -63,9 +65,12 @@ public class View extends AbstractTableModel {
                         add_map.put("re", logEntry.re);
                         add_map.put("info", logEntry.info);
                         add_map.put("state", logEntry.state);
-                        YamlUtil.updateYaml(add_map, BurpExtender.Yaml_Path);
-                        logEntry.loaded = !logEntry.loaded;
-                        fireTableRowsUpdated(row, row);
+                        if (YamlUtil.updateYaml(add_map, BurpExtender.Yaml_Path)) {
+                            logEntry.loaded = !logEntry.loaded;
+                            fireTableRowsUpdated(row, row);
+                        } else {
+                            burp.prompt(top, burp.t("prompt.ruleSaveFailed"));
+                        }
 
 
                     }
